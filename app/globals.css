@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+/* React Big Calendar styles */
+.rbc-calendar {
+  height: 100%;
+  min-height: 0;
+}
+
+.rbc-event {
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+.rbc-today {
+  background-color: #f0f9ff;
+}
+
