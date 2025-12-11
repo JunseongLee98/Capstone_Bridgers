@@ -211,18 +211,22 @@ export async function parseICSFileFromFileAsTasks(file: File): Promise<Array<{
 
 /**
  * Fetch and parse ICS file from a URL
+ * Uses proxy API route to avoid CORS issues
  */
 export async function fetchICSFromURL(url: string): Promise<CalendarEvent[]> {
   try {
-    const response = await fetch(url);
+    // Use proxy API route to avoid CORS issues
+    const proxyUrl = `/api/ics/proxy?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch calendar: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to fetch calendar: ${response.status} ${response.statusText}`);
     }
     
     const content = await response.text();
     return parseICSFile(content);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error fetching ICS from URL ${url}:`, error);
     throw error;
   }
