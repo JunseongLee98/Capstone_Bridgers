@@ -133,7 +133,9 @@ export class CalendarAIAgent {
     tasks: Task[],
     existingEvents: CalendarEvent[],
     startDate: Date,
-    endDate: Date
+    endDate: Date,
+    workStartHour: number = 9,
+    workEndHour: number = 17
   ): CalendarEvent[] {
     // Calculate durations for all tasks
     const taskDurations = tasks.map(task => ({
@@ -150,8 +152,8 @@ export class CalendarAIAgent {
       return a.duration - b.duration;
     });
 
-    // Find all empty slots
-    const emptySlots = this.findEmptySlots(existingEvents, startDate, endDate);
+    // Find all empty slots with custom work hours
+    const emptySlots = this.findEmptySlots(existingEvents, startDate, endDate, workStartHour, workEndHour);
     
     // Sort slots by start time
     emptySlots.sort((a, b) => a.start.getTime() - b.start.getTime());

@@ -6,7 +6,7 @@ import { storage } from '@/lib/storage';
 import { CalendarAIAgent } from '@/lib/ai-agent';
 import Calendar from '@/components/Calendar';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, X, Clock, CheckCircle2, Sparkles, Zap, ChevronDown, Menu, Calendar as CalendarIcon, LogOut, Upload, Link2, Trash2, CheckSquare } from 'lucide-react';
+import { Plus, X, Clock, CheckCircle2, Sparkles, Zap, ChevronDown, Menu, Calendar as CalendarIcon, LogOut, Upload, Link2, Trash2, CheckSquare, Settings } from 'lucide-react';
 import { parseICSFileFromFile, parseICSFileFromFileAsTasks, fetchICSFromURL } from '@/lib/ics-parser';
 import { formatMinutesToHoursMinutes } from '@/lib/time-utils';
 
@@ -39,6 +39,10 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventDialog, setShowEventDialog] = useState(false);
   const [conversionDuration, setConversionDuration] = useState(60); // Default duration in minutes
+  const [workHours, setWorkHours] = useState({ startHour: 9, endHour: 17 });
+  const [showWorkHoursDialog, setShowWorkHoursDialog] = useState(false);
+  const [tempWorkHours, setTempWorkHours] = useState({ startHour: 9, endHour: 17 });
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
 
   const tasksDropdownRef = useRef<HTMLDivElement>(null);
   const analyticsDropdownRef = useRef<HTMLDivElement>(null);
@@ -64,6 +68,11 @@ export default function Home() {
     const savedEvents = storage.getEvents();
     setTasks(savedTasks);
     setEvents(savedEvents);
+
+    // Load work hours
+    const savedWorkHours = storage.getWorkHours();
+    setWorkHours(savedWorkHours);
+    setTempWorkHours(savedWorkHours);
 
     // Check for Google Calendar connection
     const tokens = storage.getGoogleTokens();
@@ -445,12 +454,17 @@ export default function Home() {
         ...icsSubscribedEventsRef.current
       ];
       
-      // Schedule just this new task
+      // Get current work hours
+      const currentWorkHours = storage.getWorkHours();
+      
+      // Schedule just this new task with custom work hours
       const scheduledEvents = CalendarAIAgent.distributeTasks(
         [task],
         allExistingEvents,
         startDate,
-        endDate
+        endDate,
+        currentWorkHours.startHour,
+        currentWorkHours.endHour
       );
 
       if (scheduledEvents.length > 0) {
@@ -488,11 +502,16 @@ export default function Home() {
         return currentEvents; // All tasks already scheduled
       }
 
+      // Get current work hours
+      const currentWorkHours = storage.getWorkHours();
+      
       const scheduledEvents = CalendarAIAgent.distributeTasks(
         unscheduledTasks,
         allExistingEvents,
         startDate,
-        endDate
+        endDate,
+        currentWorkHours.startHour,
+        currentWorkHours.endHour
       );
 
       if (scheduledEvents.length > 0) {
@@ -580,19 +599,38 @@ export default function Home() {
       dueDate: dueDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
     };
 
-    await handleAddTask(taskData);
-    
-    // Optionally remove the event (or keep it)
-    if (confirm('Task created! Do you want to remove this event from the calendar?')) {
-      setEvents(events.filter(e => e.id !== event.id));
-      // Also remove from Google events or ICS subscribed events if applicable
-      setGoogleEvents(googleEvents.filter(e => e.id !== event.id));
-      setICSSubscribedEvents(icsSubscribedEvents.filter(e => e.id !== event.id));
-    }
-    
+    // Create the task object
+    const newTask: Task = {
+      title: taskData.title,
+      description: taskData.description,
+      estimatedDuration: taskData.estimatedDuration,
+      priority: taskData.priority,
+      category: taskData.category,
+      dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
+      id: uuidv4(),
+      createdAt: new Date(),
+      actualDurations: [],
+    };
+
+    // Add task to state
+    const updatedTasks = [...tasks, newTask];
+    setTasks(updatedTasks);
+
+    // Close dialog first
     setShowEventDialog(false);
     setSelectedEvent(null);
     setConversionDuration(60); // Reset to default
+
+    // Schedule the task immediately
+    scheduleNewTask(newTask);
+    
+    // Optionally remove the event (or keep it)
+    if (confirm('Task created and scheduled! Do you want to remove this event from the calendar?')) {
+      setEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
+      // Also remove from Google events or ICS subscribed events if applicable
+      setGoogleEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
+      setICSSubscribedEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
+    }
   };
 
   // Delete event
@@ -880,18 +918,69 @@ export default function Home() {
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
-                              <div>
+                              <div className="relative">
                                 <label className="block text-xs font-medium text-gray-700 mb-1">
                                   Due Date (Optional)
                                 </label>
-                                <input
-                                  type="date"
-                                  value={newTask.dueDate || ''}
-                                  onChange={(e) =>
-                                    setNewTask({ ...newTask, dueDate: e.target.value || undefined })
-                                  }
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                />
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    value={newTask.dueDate ? new Date(newTask.dueDate + 'T00:00:00').toLocaleDateString() : 'Select date'}
+                                    onClick={() => setShowDueDatePicker(!showDueDatePicker)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent cursor-pointer"
+                                    placeholder="Select date"
+                                  />
+                                  <CalendarIcon 
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" 
+                                    size={16} 
+                                  />
+                                  {showDueDatePicker && (
+                                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-50 p-3">
+                                      <div className="flex justify-between items-center mb-2">
+                                        <button
+                                          onClick={() => {
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            setNewTask({ ...newTask, dueDate: today.toISOString().split('T')[0] });
+                                            setShowDueDatePicker(false);
+                                          }}
+                                          className="text-xs px-2 py-1 bg-primary-50 text-primary-700 rounded hover:bg-primary-100"
+                                        >
+                                          Today
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            const tomorrow = new Date();
+                                            tomorrow.setDate(tomorrow.getDate() + 1);
+                                            tomorrow.setHours(0, 0, 0, 0);
+                                            setNewTask({ ...newTask, dueDate: tomorrow.toISOString().split('T')[0] });
+                                            setShowDueDatePicker(false);
+                                          }}
+                                          className="text-xs px-2 py-1 bg-primary-50 text-primary-700 rounded hover:bg-primary-100"
+                                        >
+                                          Tomorrow
+                                        </button>
+                                        <button
+                                          onClick={() => setShowDueDatePicker(false)}
+                                          className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
+                                        >
+                                          <X size={14} />
+                                        </button>
+                                      </div>
+                                      <input
+                                        type="date"
+                                        value={newTask.dueDate || ''}
+                                        onChange={(e) => {
+                                          setNewTask({ ...newTask, dueDate: e.target.value || undefined });
+                                          setShowDueDatePicker(false);
+                                        }}
+                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                        min={new Date().toISOString().split('T')[0]}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                               <div>
                                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1101,6 +1190,83 @@ export default function Home() {
                   setShowEventDialog(false);
                   setSelectedEvent(null);
                   setConversionDuration(60);
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Work Hours Settings Dialog */}
+      {showWorkHoursDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Set Work Hours</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Tasks will be scheduled during these hours (Monday-Friday)
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Start Hour
+                </label>
+                <select
+                  value={tempWorkHours.startHour}
+                  onChange={(e) => setTempWorkHours({ ...tempWorkHours, startHour: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                    const ampm = hour < 12 ? 'AM' : 'PM';
+                    return (
+                      <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  End Hour
+                </label>
+                <select
+                  value={tempWorkHours.endHour}
+                  onChange={(e) => setTempWorkHours({ ...tempWorkHours, endHour: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                    const ampm = hour < 12 ? 'AM' : 'PM';
+                    return (
+                      <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>
+                    );
+                  })}
+                </select>
+              </div>
+              {tempWorkHours.startHour >= tempWorkHours.endHour && (
+                <p className="text-sm text-red-600">End hour must be after start hour</p>
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  if (tempWorkHours.startHour < tempWorkHours.endHour) {
+                    setWorkHours(tempWorkHours);
+                    storage.saveWorkHours(tempWorkHours);
+                    setShowWorkHoursDialog(false);
+                  }
+                }}
+                disabled={tempWorkHours.startHour >= tempWorkHours.endHour}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setShowWorkHoursDialog(false);
+                  setTempWorkHours(workHours);
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >

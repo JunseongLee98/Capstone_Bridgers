@@ -5,6 +5,7 @@ const EVENTS_KEY = 'cadence_events';
 const GOOGLE_TOKENS_KEY = 'cadence_google_tokens';
 const GOOGLE_EVENTS_KEY = 'cadence_google_events';
 const ICS_SUBSCRIPTIONS_KEY = 'cadence_ics_subscriptions';
+const WORK_HOURS_KEY = 'cadence_work_hours';
 
 export const storage = {
   // Tasks
@@ -91,6 +92,18 @@ export const storage = {
   removeICSSubscription(id: string): void {
     const subscriptions = this.getICSSubscriptions();
     this.saveICSSubscriptions(subscriptions.filter(sub => sub.id !== id));
+  },
+
+  // Work Hours
+  getWorkHours(): { startHour: number; endHour: number } {
+    if (typeof window === 'undefined') return { startHour: 9, endHour: 17 };
+    const data = localStorage.getItem(WORK_HOURS_KEY);
+    return data ? JSON.parse(data) : { startHour: 9, endHour: 17 };
+  },
+
+  saveWorkHours(workHours: { startHour: number; endHour: number }): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(WORK_HOURS_KEY, JSON.stringify(workHours));
   },
 };
 
