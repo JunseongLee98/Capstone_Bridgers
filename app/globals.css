@@ -24,6 +24,12 @@ body {
   min-height: 0;
 }
 
+.rbc-toolbar-label {
+  font-size: 32px;
+  font-weight: 600;
+  background-color: #F7F6FF; 
+}
+
 .rbc-event {
   border-radius: 4px;
   padding: 2px 5px;
@@ -40,5 +46,32 @@ body {
 
 .rbc-time-slot {
   min-height: 30px; /* each 30-minute slot within the hour */
+}
+
+.rbc-time-view,
+.rbc-month-view,
+.rbc-agenda-view {
+  background-color: white;
+}
+
+.rbc-toolbar .rbc-btn-group button {
+  background: white;
+  color: #3B3B3B; 
+  border: 1px solid rgba(134, 119, 173, 0.25);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 150ms ease;
+}
+
+.rbc-header {
+  color: #3B3B3B;       
+  font-weight: 600;
+}
+
+.rbc-label {
+  color: #3B3B3B;       
+  font-weight: 400;
 }
 
