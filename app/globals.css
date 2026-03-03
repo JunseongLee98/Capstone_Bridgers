@@ -33,3 +33,12 @@ body {
   background-color: #f0f9ff;
 }
 
+/* Make each hour taller in the time grid (tuned size) */
+.rbc-timeslot-group {
+  min-height: 60px; /* one hour group */
+}
+
+.rbc-time-slot {
+  min-height: 30px; /* each 30-minute slot within the hour */
+}
+

@@ -4,9 +4,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Task, CalendarEvent } from '@/types';
 import { storage } from '@/lib/storage';
 import { CalendarAIAgent } from '@/lib/ai-agent';
+import { formatDateToLocalISO } from '@/lib/date-utils';
 import Calendar from '@/components/Calendar';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, X, Clock, CheckCircle2, Sparkles, Zap, ChevronDown, Menu, Calendar as CalendarIcon, LogOut, Upload, Link2, Trash2, CheckSquare, Settings } from 'lucide-react';
+import Image from 'next/image';
+import { Plus, X, Clock, CheckCircle2, ChevronDown, Menu, Calendar as CalendarIcon, Upload, Link2, Trash2, CheckSquare, Settings } from 'lucide-react';
 import { parseICSFileFromFile, parseICSFileFromFileAsTasks, fetchICSFromURL } from '@/lib/ics-parser';
 import { formatMinutesToHoursMinutes } from '@/lib/time-utils';
 
@@ -14,7 +16,6 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
-  const [analyticsDropdownOpen, setAnalyticsDropdownOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
@@ -31,7 +32,9 @@ export default function Home() {
   const [isLoadingGoogleEvents, setIsLoadingGoogleEvents] = useState(false);
   const [isImportingICS, setIsImportingICS] = useState(false);
   const [icsSubscribedEvents, setICSSubscribedEvents] = useState<CalendarEvent[]>([]);
-  const [icsSubscriptions, setICSSubscriptions] = useState<Array<{ id: string; url: string; name: string }>>([]);
+  const [icsSubscriptions, setICSSubscriptions] = useState<
+    Array<{ id: string; url: string; name: string; color?: string }>
+  >([]);
   const [isLoadingICSSubscription, setIsLoadingICSSubscription] = useState(false);
   const [newSubscriptionUrl, setNewSubscriptionUrl] = useState('');
   const [newSubscriptionName, setNewSubscriptionName] = useState('');
@@ -39,13 +42,22 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventDialog, setShowEventDialog] = useState(false);
   const [conversionDuration, setConversionDuration] = useState(60); // Default duration in minutes
-  const [workHours, setWorkHours] = useState({ startHour: 9, endHour: 17 });
+  const [workHours, setWorkHours] = useState({ startHour: 9, endHour: 18 });
   const [showWorkHoursDialog, setShowWorkHoursDialog] = useState(false);
-  const [tempWorkHours, setTempWorkHours] = useState({ startHour: 9, endHour: 17 });
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [tempWorkHours, setTempWorkHours] = useState({ startHour: 9, endHour: 18 });
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [breakAfterEvents, setBreakAfterEvents] = useState(5);
+  const [tempBreakAfterEvents, setTempBreakAfterEvents] = useState(5);
+  const [focusMinutes, setFocusMinutes] = useState(50);
+  const [tempFocusMinutes, setTempFocusMinutes] = useState(50);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [taskDurationMode, setTaskDurationMode] = useState<'preset' | 'custom'>('preset');
+  const [taskDurationCustomHours, setTaskDurationCustomHours] = useState(1);
+  const [conversionDurationMode, setConversionDurationMode] = useState<'preset' | 'custom'>('preset');
+  const [conversionDurationCustomHours, setConversionDurationCustomHours] = useState(1);
 
   const tasksDropdownRef = useRef<HTMLDivElement>(null);
-  const analyticsDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tasksFileInputRef = useRef<HTMLInputElement>(null);
   
@@ -62,6 +74,16 @@ export default function Home() {
     icsSubscribedEventsRef.current = icsSubscribedEvents;
   }, [icsSubscribedEvents]);
 
+  // Pastel color palette for subscribed ICS calendars (easy on the eyes)
+  const ICS_SUBSCRIPTION_COLORS = [
+    '#bfdbfe', // pastel blue
+    '#bbf7d0', // pastel green
+    '#fed7aa', // pastel orange
+    '#fecaca', // pastel red
+    '#e9d5ff', // pastel purple
+    '#fbcfe8', // pastel pink
+  ];
+
   // Load data from localStorage on mount
   useEffect(() => {
     const savedTasks = storage.getTasks();
@@ -74,6 +96,12 @@ export default function Home() {
     setWorkHours(savedWorkHours);
     setTempWorkHours(savedWorkHours);
 
+    // Load scheduling settings
+    setBreakAfterEvents(storage.getBreakAfterEvents());
+    setTempBreakAfterEvents(storage.getBreakAfterEvents());
+    setFocusMinutes(storage.getFocusMinutes());
+    setTempFocusMinutes(storage.getFocusMinutes());
+
     // Check for Google Calendar connection
     const tokens = storage.getGoogleTokens();
     if (tokens?.access_token) {
@@ -82,10 +110,19 @@ export default function Home() {
     }
 
     // Load ICS subscriptions
-    const subscriptions = storage.getICSSubscriptions();
-    setICSSubscriptions(subscriptions);
-    if (subscriptions.length > 0) {
-      fetchAllICSSubscriptions(subscriptions);
+    const rawSubscriptions = storage.getICSSubscriptions();
+    // Ensure each subscription has a color assigned
+    const subscriptionsWithColors = rawSubscriptions.map((sub, index) => ({
+      ...sub,
+      color:
+        sub.color ||
+        ICS_SUBSCRIPTION_COLORS[index % ICS_SUBSCRIPTION_COLORS.length],
+    }));
+    setICSSubscriptions(subscriptionsWithColors);
+    if (subscriptionsWithColors.length > 0) {
+      // Persist colors for any existing subscriptions that didn't have one
+      storage.saveICSSubscriptions(subscriptionsWithColors);
+      fetchAllICSSubscriptions(subscriptionsWithColors);
     }
 
     // Handle OAuth callback from URL query params
@@ -277,20 +314,24 @@ export default function Home() {
   };
 
   // Fetch all ICS subscriptions
-  const fetchAllICSSubscriptions = async (subscriptions: Array<{ id: string; url: string; name: string }> = icsSubscriptions) => {
+  const fetchAllICSSubscriptions = async (
+    subscriptions: Array<{ id: string; url: string; name: string; color?: string }> = icsSubscriptions
+  ) => {
     setIsLoadingICSSubscription(true);
     try {
       const allEvents: CalendarEvent[] = [];
       
       await Promise.all(
-        subscriptions.map(async (subscription) => {
+        subscriptions.map(async (subscription, index) => {
           try {
             const events = await fetchICSFromURL(subscription.url);
             // Tag events with subscription ID to differentiate them
             const taggedEvents = events.map(event => ({
               ...event,
               id: `ics-sub-${subscription.id}-${event.id}`,
-              color: '#8b5cf6', // Purple for subscribed calendars
+              color:
+                subscription.color ||
+                ICS_SUBSCRIPTION_COLORS[index % ICS_SUBSCRIPTION_COLORS.length],
             }));
             allEvents.push(...taggedEvents);
           } catch (error) {
@@ -315,8 +356,28 @@ export default function Home() {
     }
 
     try {
-      // Validate URL
-      const urlObj = new URL(newSubscriptionUrl);
+      // Normalize and validate URL
+      const rawUrl = newSubscriptionUrl.trim();
+      let finalUrl = rawUrl;
+      let displayName = newSubscriptionName.trim();
+      let urlObj = new URL(rawUrl);
+
+      // Support Google Calendar embed URLs by converting them to ICS feed URLs
+      if (
+        urlObj.hostname === 'calendar.google.com' &&
+        urlObj.pathname.startsWith('/calendar/embed')
+      ) {
+        const src = urlObj.searchParams.get('src');
+        if (src) {
+          const encodedSrc = encodeURIComponent(src);
+          finalUrl = `https://calendar.google.com/calendar/ical/${encodedSrc}/public/basic.ics`;
+          urlObj = new URL(finalUrl);
+
+          if (!displayName) {
+            displayName = src.includes('@') ? src.split('@')[0] : src;
+          }
+        }
+      }
       
       // Only allow HTTPS for security
       if (urlObj.protocol !== 'https:') {
@@ -326,11 +387,11 @@ export default function Home() {
       
       // Test fetch to make sure it works
       setIsLoadingICSSubscription(true);
-      await fetchICSFromURL(newSubscriptionUrl);
+      await fetchICSFromURL(finalUrl);
       
-      // Add subscription
-      const name = newSubscriptionName.trim() || urlObj.hostname;
-      storage.addICSSubscription(newSubscriptionUrl, name);
+      // Add subscription (color will be auto-assigned from palette)
+      const name = displayName || urlObj.hostname;
+      storage.addICSSubscription(finalUrl, name);
       
       const updatedSubscriptions = storage.getICSSubscriptions();
       setICSSubscriptions(updatedSubscriptions);
@@ -368,6 +429,28 @@ export default function Home() {
     }
   };
 
+  // Change color of an ICS subscription by cycling through the palette
+  const handleCycleICSSubscriptionColor = (id: string) => {
+    setICSSubscriptions(prev => {
+      const updated = prev.map(sub => {
+        if (sub.id !== id) return sub;
+        const currentColor = sub.color || ICS_SUBSCRIPTION_COLORS[0];
+        const currentIndex =
+          ICS_SUBSCRIPTION_COLORS.indexOf(currentColor) === -1
+            ? 0
+            : ICS_SUBSCRIPTION_COLORS.indexOf(currentColor);
+        const nextColor =
+          ICS_SUBSCRIPTION_COLORS[(currentIndex + 1) % ICS_SUBSCRIPTION_COLORS.length];
+        return { ...sub, color: nextColor };
+      });
+      // Persist updated colors
+      storage.saveICSSubscriptions(updated);
+      // Also refresh subscribed events with new colors
+      fetchAllICSSubscriptions(updated);
+      return updated;
+    });
+  };
+
   // Save to localStorage whenever data changes
   useEffect(() => {
     storage.saveTasks(tasks);
@@ -388,9 +471,6 @@ export default function Home() {
     const handleClickOutside = (event: MouseEvent) => {
       if (tasksDropdownRef.current && !tasksDropdownRef.current.contains(event.target as Node)) {
         setTasksDropdownOpen(false);
-      }
-      if (analyticsDropdownRef.current && !analyticsDropdownRef.current.contains(event.target as Node)) {
-        setAnalyticsDropdownOpen(false);
       }
     };
 
@@ -428,6 +508,7 @@ export default function Home() {
       dueDate: undefined,
     });
     setIsAddingTask(false);
+    setShowAddTaskDialog(false);
     
     // Automatically schedule the newly created task
     scheduleNewTask(newTask);
@@ -458,13 +539,17 @@ export default function Home() {
       const currentWorkHours = storage.getWorkHours();
       
       // Schedule just this new task with custom work hours
+      const breakMinutes = storage.getBreakAfterEvents();
+      const focusMinutes = storage.getFocusMinutes();
       const scheduledEvents = CalendarAIAgent.distributeTasks(
         [task],
         allExistingEvents,
         startDate,
         endDate,
         currentWorkHours.startHour,
-        currentWorkHours.endHour
+        currentWorkHours.endHour,
+        breakMinutes,
+        focusMinutes
       );
 
       if (scheduledEvents.length > 0) {
@@ -505,13 +590,17 @@ export default function Home() {
       // Get current work hours
       const currentWorkHours = storage.getWorkHours();
       
+      const breakMinutes = storage.getBreakAfterEvents();
+      const focusMinutes = storage.getFocusMinutes();
       const scheduledEvents = CalendarAIAgent.distributeTasks(
         unscheduledTasks,
         allExistingEvents,
         startDate,
         endDate,
         currentWorkHours.startHour,
-        currentWorkHours.endHour
+        currentWorkHours.endHour,
+        breakMinutes,
+        focusMinutes
       );
 
       if (scheduledEvents.length > 0) {
@@ -556,7 +645,6 @@ export default function Home() {
     }
 
     setIsProcessing(false);
-    setAnalyticsDropdownOpen(false);
   };
 
   const handleSelectSlot = (slot: { start: Date; end: Date }) => {
@@ -596,7 +684,7 @@ export default function Home() {
       estimatedDuration: conversionDuration,
       priority: 'medium' as const,
       category: '',
-      dueDate: dueDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+      dueDate: formatDateToLocalISO(dueDate), // Format as YYYY-MM-DD in device local timezone
     };
 
     // Create the task object
@@ -669,17 +757,24 @@ export default function Home() {
   const incompleteTasksCount = tasks.filter(t => !t.completedAt).length;
 
   return (
-    <main className="h-screen flex flex-col bg-gray-50">
+    <main className="h-screen flex flex-col bg-[#f4f0ff]">
       {/* Header with dropdowns */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Cadence</h1>
-              <p className="text-sm text-gray-600">AI-powered calendar</p>
+      <header className="bg-gradient-to-r from-[#2b1b52] via-[#5b3fa8] to-[#c9b6ff] shadow-md">
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-3">
+              <div className="relative h-9 w-[140px]">
+                <Image
+                  src="/cadence-logo-white.png"
+                  alt="Cadence"
+                  fill
+                  priority
+                  className="object-contain"
+                />
+              </div>
             </div>
             
-            <div className="flex items-center gap-4 relative">
+            <div className="flex items-center gap-3 relative">
               {/* ICS File Import & Subscribe */}
               <input
                 ref={fileInputRef}
@@ -693,7 +788,7 @@ export default function Home() {
                 <button
                   onClick={triggerFileInput}
                   disabled={isImportingICS}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-purple-100 border border-white/20 hover:bg-white/16 transition-colors disabled:opacity-50 text-sm"
                   title="Import ICS calendar file"
                 >
                   <Upload size={20} />
@@ -701,7 +796,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setShowSubscriptionDialog(!showSubscriptionDialog)}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white border border-purple-700 rounded-lg hover:bg-purple-700 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-400 text-[#1f1235] font-semibold shadow-md hover:bg-purple-300 transition-colors text-sm"
                   title="Subscribe to ICS calendar URL"
                 >
                   <Link2 size={20} />
@@ -722,11 +817,11 @@ export default function Home() {
                         type="url"
                         value={newSubscriptionUrl}
                         onChange={(e) => setNewSubscriptionUrl(e.target.value)}
-                        placeholder="https://calendar.google.com/calendar/ical/..."
+                        placeholder="ICS or Google embed URL"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Enter a public ICS calendar feed URL
+                        Enter a public ICS calendar feed URL or a Google Calendar embed link
                       </p>
                     </div>
                     <div>
@@ -748,18 +843,38 @@ export default function Home() {
                         </label>
                         <div className="space-y-1 max-h-32 overflow-y-auto">
                           {icsSubscriptions.map((sub) => (
-                            <div key={sub.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">{sub.name}</p>
-                                <p className="text-xs text-gray-500 truncate">{sub.url}</p>
+                            <div
+                              key={sub.id}
+                              className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                            >
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span
+                                  className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0"
+                                  style={{ backgroundColor: sub.color || '#8b5cf6' }}
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-800 truncate">
+                                    {sub.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 truncate">{sub.url}</p>
+                                </div>
                               </div>
-                              <button
-                                onClick={() => handleRemoveICSSubscription(sub.id)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Remove subscription"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                              <div className="flex items-center gap-1 ml-2">
+                                <button
+                                  onClick={() => handleCycleICSSubscriptionColor(sub.id)}
+                                  className="px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
+                                  title="Change calendar color"
+                                >
+                                  Color
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveICSSubscription(sub.id)}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Remove subscription"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -788,49 +903,18 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Google Calendar Connection */}
-              {!googleConnected ? (
-                <button
-                  onClick={handleConnectGoogle}
-                  className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <CalendarIcon size={20} />
-                  Connect Google Calendar
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={fetchGoogleCalendarEvents}
-                    disabled={isLoadingGoogleEvents}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 border border-green-300 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
-                    title="Refresh Google Calendar events"
-                  >
-                    <CalendarIcon size={20} />
-                    {isLoadingGoogleEvents ? 'Syncing...' : 'Google Calendar'}
-                  </button>
-                  <button
-                    onClick={handleDisconnectGoogle}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="Disconnect Google Calendar"
-                  >
-                    <LogOut size={18} />
-                  </button>
-                </div>
-              )}
-
               {/* Tasks Dropdown */}
               <div className="relative" ref={tasksDropdownRef}>
                 <button
                   onClick={() => {
                     setTasksDropdownOpen(!tasksDropdownOpen);
-                    setAnalyticsDropdownOpen(false);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#f97316] via-[#facc15] to-[#f97316] text-slate-900 font-semibold shadow-[0_0_0_1px_rgba(255,255,255,0.35)] hover:shadow-[0_0_0_2px_rgba(255,255,255,0.6)] transition-all text-sm"
                 >
                   <Menu size={20} />
                   Tasks
                   {incompleteTasksCount > 0 && (
-                    <span className="bg-white text-primary-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                    <span className="bg-white/90 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
                       {incompleteTasksCount}
                     </span>
                   )}
@@ -901,17 +985,52 @@ export default function Home() {
                                 Estimated Duration
                               </label>
                               <div className="flex gap-2">
-                                <input
-                                  type="number"
-                                  value={newTask.estimatedDuration || ''}
-                                  onChange={(e) => {
-                                    const value = parseInt(e.target.value) || 0;
-                                    setNewTask({ ...newTask, estimatedDuration: value });
-                                  }}
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                  placeholder="Minutes"
-                                  min="0"
-                                />
+                                <div className="flex-1 space-y-2">
+                                  <select
+                                    value={
+                                      taskDurationMode === 'preset'
+                                        ? String(newTask.estimatedDuration || 60)
+                                        : 'custom'
+                                    }
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      if (value === 'custom') {
+                                        setTaskDurationMode('custom');
+                                        return;
+                                      }
+                                      setTaskDurationMode('preset');
+                                      const minutes = parseInt(value, 10) || 60;
+                                      setNewTask({ ...newTask, estimatedDuration: minutes });
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                  >
+                                    {[30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600].map((mins) => (
+                                      <option key={mins} value={mins}>
+                                        {formatMinutesToHoursMinutes(mins)}
+                                      </option>
+                                    ))}
+                                    <option value="custom">Custom (hours)</option>
+                                  </select>
+                                  {taskDurationMode === 'custom' && (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="number"
+                                        min={0.5}
+                                        step={0.5}
+                                        value={taskDurationCustomHours}
+                                        onChange={(e) => {
+                                          const hours = parseFloat(e.target.value) || 0;
+                                          setTaskDurationCustomHours(hours);
+                                          const minutes = Math.max(0, Math.round(hours * 60));
+                                          setNewTask({ ...newTask, estimatedDuration: minutes });
+                                        }}
+                                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        placeholder="Hours"
+                                      />
+                                      <span className="text-xs text-gray-600">hours</span>
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 min-w-[140px] flex items-center">
                                   {formatMinutesToHoursMinutes(newTask.estimatedDuration || 0)}
                                 </div>
@@ -942,7 +1061,7 @@ export default function Home() {
                                           onClick={() => {
                                             const today = new Date();
                                             today.setHours(0, 0, 0, 0);
-                                            setNewTask({ ...newTask, dueDate: today.toISOString().split('T')[0] });
+                                            setNewTask({ ...newTask, dueDate: formatDateToLocalISO(today) });
                                             setShowDueDatePicker(false);
                                           }}
                                           className="text-xs px-2 py-1 bg-primary-50 text-primary-700 rounded hover:bg-primary-100"
@@ -954,7 +1073,7 @@ export default function Home() {
                                             const tomorrow = new Date();
                                             tomorrow.setDate(tomorrow.getDate() + 1);
                                             tomorrow.setHours(0, 0, 0, 0);
-                                            setNewTask({ ...newTask, dueDate: tomorrow.toISOString().split('T')[0] });
+                                            setNewTask({ ...newTask, dueDate: formatDateToLocalISO(tomorrow) });
                                             setShowDueDatePicker(false);
                                           }}
                                           className="text-xs px-2 py-1 bg-primary-50 text-primary-700 rounded hover:bg-primary-100"
@@ -976,7 +1095,7 @@ export default function Home() {
                                           setShowDueDatePicker(false);
                                         }}
                                         className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                        min={new Date().toISOString().split('T')[0]}
+                                        min={formatDateToLocalISO(new Date())}
                                       />
                                     </div>
                                   )}
@@ -1090,29 +1209,19 @@ export default function Home() {
                 )}
               </div>
 
-              {/* AI Analytics (single button) */}
+              {/* Settings (rightmost icon-only) */}
               <button
-                onClick={async () => {
-                  setIsProcessing(true);
-                  const taskStats = CalendarAIAgent.getTaskDurationStats(tasks);
-                  setStats(taskStats);
-                  await autoDistributeTasks();
-                  setIsProcessing(false);
+                onClick={() => {
+                  setTempWorkHours(workHours);
+                  setTempBreakAfterEvents(breakAfterEvents);
+                  setTempFocusMinutes(focusMinutes);
+                  setShowSettingsDialog(true);
                 }}
-                disabled={isProcessing || incompleteTasksCount === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg hover:from-primary-600 hover:to-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                className="ml-1 p-2.5 rounded-full bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
+                title="Settings"
+                aria-label="Settings"
               >
-                {isProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={20} />
-                    AI Analytics
-                  </>
-                )}
+                <Settings size={20} />
               </button>
             </div>
           </div>
@@ -1123,6 +1232,24 @@ export default function Home() {
       <div className="flex-1 overflow-hidden">
         <div className="h-full w-full p-4">
           <div className="h-full w-full bg-white rounded-lg shadow-lg p-6">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">Calendar</h2>
+                <p className="text-xs text-gray-500">Click and drag to create events</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddTaskDialog(true);
+                  setTasksDropdownOpen(false);
+                  setIsAddingTask(false);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#f97316] via-[#facc15] to-[#f97316] text-slate-900 font-semibold shadow-md hover:shadow-lg transition-all"
+                title="Add a new task"
+              >
+                <Plus size={18} />
+                Add Task
+              </button>
+            </div>
             <Calendar
               events={allEvents}
               onSelectSlot={handleSelectSlot}
@@ -1131,6 +1258,158 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Add Task Dialog (from calendar) */}
+      {showAddTaskDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Add Task</h3>
+                <p className="text-sm text-gray-600">This will be scheduled automatically</p>
+              </div>
+              <button
+                onClick={() => setShowAddTaskDialog(false)}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newTask.title.trim()) {
+                  handleAddTask(newTask);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Task title *"
+                  required
+                  autoFocus
+                />
+                <textarea
+                  value={newTask.description}
+                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Description"
+                  rows={3}
+                />
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Estimated Duration
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 space-y-2">
+                      <select
+                        value={
+                          taskDurationMode === 'preset'
+                            ? String(newTask.estimatedDuration || 60)
+                            : 'custom'
+                        }
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === 'custom') {
+                            setTaskDurationMode('custom');
+                            return;
+                          }
+                          setTaskDurationMode('preset');
+                          const minutes = parseInt(value, 10) || 60;
+                          setNewTask({ ...newTask, estimatedDuration: minutes });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        {[30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600].map((mins) => (
+                          <option key={mins} value={mins}>
+                            {formatMinutesToHoursMinutes(mins)}
+                          </option>
+                        ))}
+                        <option value="custom">Custom (hours)</option>
+                      </select>
+                      {taskDurationMode === 'custom' && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0.5}
+                            step={0.5}
+                            value={taskDurationCustomHours}
+                            onChange={(e) => {
+                              const hours = parseFloat(e.target.value) || 0;
+                              setTaskDurationCustomHours(hours);
+                              const minutes = Math.max(0, Math.round(hours * 60));
+                              setNewTask({ ...newTask, estimatedDuration: minutes });
+                            }}
+                            className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            placeholder="Hours"
+                          />
+                          <span className="text-xs text-gray-600">hours</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 min-w-[140px] flex items-center">
+                      {formatMinutesToHoursMinutes(newTask.estimatedDuration || 0)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Due Date (Optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={newTask.dueDate || ''}
+                      onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value || undefined })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      min={formatDateToLocalISO(new Date())}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      value={newTask.priority}
+                      onChange={(e) =>
+                        setNewTask({ ...newTask, priority: e.target.value as 'low' | 'medium' | 'high' })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  Add Task
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddTaskDialog(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Event Dialog - Convert to Task or Delete */}
       {showEventDialog && selectedEvent && (
@@ -1154,14 +1433,55 @@ export default function Home() {
                   Task Duration
                 </label>
                 <div className="flex gap-2 items-center">
-                  <input
-                    type="number"
-                    value={conversionDuration}
-                    onChange={(e) => setConversionDuration(parseInt(e.target.value) || 60)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    placeholder="Minutes"
-                    min="0"
-                  />
+                  <div className="flex-1 space-y-2">
+                    <select
+                      value={
+                        conversionDurationMode === 'preset' &&
+                        [30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600].includes(
+                          conversionDuration
+                        )
+                          ? String(conversionDuration)
+                          : 'custom'
+                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === 'custom') {
+                          setConversionDurationMode('custom');
+                          return;
+                        }
+                        setConversionDurationMode('preset');
+                        const minutes = parseInt(value, 10) || 60;
+                        setConversionDuration(minutes);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      {[30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600].map((mins) => (
+                        <option key={mins} value={mins}>
+                          {formatMinutesToHoursMinutes(mins)}
+                        </option>
+                      ))}
+                      <option value="custom">Custom (hours)</option>
+                    </select>
+                    {conversionDurationMode === 'custom' && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0.5}
+                          step={0.5}
+                          value={conversionDurationCustomHours}
+                          onChange={(e) => {
+                            const hours = parseFloat(e.target.value) || 0;
+                            setConversionDurationCustomHours(hours);
+                            const minutes = Math.max(0, Math.round(hours * 60));
+                            setConversionDuration(minutes);
+                          }}
+                          className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          placeholder="Hours"
+                        />
+                        <span className="text-xs text-gray-600">hours</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 min-w-[140px]">
                     {formatMinutesToHoursMinutes(conversionDuration)}
                   </div>
@@ -1200,13 +1520,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* Work Hours Settings Dialog */}
+      {/* Work Hours Settings Dialog (standalone - kept for any direct links) */}
       {showWorkHoursDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Set Work Hours</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Tasks will be scheduled during these hours (Monday-Friday)
+              Tasks will only be created and scheduled during these hours (Monday–Friday). The system uses this window to find available slots for your work.
             </p>
             <div className="space-y-4">
               <div>
@@ -1267,6 +1587,126 @@ export default function Home() {
                 onClick={() => {
                   setShowWorkHoursDialog(false);
                   setTempWorkHours(workHours);
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Dialog */}
+      {showSettingsDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-gray-800 mb-1">Settings</h3>
+            <p className="text-sm text-gray-600 mb-6">Configure scheduling and calendar behavior</p>
+            
+            <div className="space-y-6">
+              {/* Working Hours */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Clock size={16} />
+                  Working Hours
+                </h4>
+                <p className="text-xs text-gray-500 mb-2">Tasks are only scheduled during these hours (Mon–Fri)</p>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
+                    <select
+                      value={tempWorkHours.startHour}
+                      onChange={(e) => setTempWorkHours({ ...tempWorkHours, startHour: parseInt(e.target.value) })}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                        const ampm = hour < 12 ? 'AM' : 'PM';
+                        return <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">End</label>
+                    <select
+                      value={tempWorkHours.endHour}
+                      onChange={(e) => setTempWorkHours({ ...tempWorkHours, endHour: parseInt(e.target.value) })}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                        const ampm = hour < 12 ? 'AM' : 'PM';
+                        return <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>;
+                      })}
+                    </select>
+                  </div>
+                </div>
+                {tempWorkHours.startHour >= tempWorkHours.endHour && (
+                  <p className="text-xs text-red-600 mt-1">End hour must be after start hour</p>
+                )}
+              </div>
+
+              {/* Break after events */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">Break After Each Event</h4>
+                <p className="text-xs text-gray-500 mb-2">Gap (in minutes) before another task can be scheduled after an event or task</p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    value={tempBreakAfterEvents}
+                    onChange={(e) => setTempBreakAfterEvents(Math.max(0, parseInt(e.target.value) || 0))}
+                    min={0}
+                    max={120}
+                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-600">minutes</span>
+                </div>
+              </div>
+
+              {/* Focus hours */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">Focus Duration</h4>
+                <p className="text-xs text-gray-500 mb-2">How long you feel comfortable focusing on a task. Longer tasks are split into chunks of this size (30 min – 3 hours)</p>
+                <select
+                  value={tempFocusMinutes}
+                  onChange={(e) => setTempFocusMinutes(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                >
+                  {[30, 45, 50, 60, 75, 90, 120, 150, 180].map((mins) => (
+                    <option key={mins} value={mins}>
+                      {mins < 60 ? `${mins} minutes` : mins === 60 ? '1 hour' : `${mins / 60} hours`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  const valid = tempWorkHours.startHour < tempWorkHours.endHour;
+                  if (valid) {
+                    setWorkHours(tempWorkHours);
+                    storage.saveWorkHours(tempWorkHours);
+                  }
+                  setBreakAfterEvents(tempBreakAfterEvents);
+                  storage.saveBreakAfterEvents(tempBreakAfterEvents);
+                  setFocusMinutes(tempFocusMinutes);
+                  storage.saveFocusMinutes(tempFocusMinutes);
+                  setShowSettingsDialog(false);
+                }}
+                disabled={tempWorkHours.startHour >= tempWorkHours.endHour}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setShowSettingsDialog(false);
+                  setTempWorkHours(workHours);
+                  setTempBreakAfterEvents(breakAfterEvents);
+                  setTempFocusMinutes(focusMinutes);
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >

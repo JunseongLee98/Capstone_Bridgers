@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Task, CalendarEvent, TaskDurationStats } from '@/types';
 import { CalendarAIAgent } from '@/lib/ai-agent';
+import { storage } from '@/lib/storage';
 import { Sparkles, Zap } from 'lucide-react';
 
 interface AIAgentPanelProps {
@@ -43,12 +44,19 @@ export default function AIAgentPanel({
     endDate.setDate(endDate.getDate() + 14);
     endDate.setHours(23, 59, 59, 999);
 
-    // Distribute tasks
+    // Distribute tasks using user's work hours and scheduling settings
+    const workHours = storage.getWorkHours();
+    const breakMinutes = storage.getBreakAfterEvents();
+    const focusMinutes = storage.getFocusMinutes();
     const scheduledEvents = CalendarAIAgent.distributeTasks(
       incompleteTasks,
       existingEvents,
       startDate,
-      endDate
+      endDate,
+      workHours.startHour,
+      workHours.endHour,
+      breakMinutes,
+      focusMinutes
     );
 
     if (scheduledEvents.length === 0) {

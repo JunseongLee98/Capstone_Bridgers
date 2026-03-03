@@ -1,5 +1,6 @@
 import ICAL from 'ical.js';
 import { CalendarEvent } from '@/types';
+import { formatDateToLocalISO } from '@/lib/date-utils';
 
 /**
  * Parse ICS file content and convert to CalendarEvent array
@@ -148,7 +149,7 @@ export function parseICSFileAsTasks(icsContent: string): Array<{
       const durationMinutes = Math.round(durationMs / (1000 * 60));
       
       // Use end date as due date (for tasks, due date is typically when it should be completed)
-      const dueDate = endTime.toISOString().split('T')[0]; // Just the date part
+      const dueDate = formatDateToLocalISO(endTime); // Just the local date part
       
       // Check for priority in categories or classification
       let priority: 'low' | 'medium' | 'high' = 'medium';

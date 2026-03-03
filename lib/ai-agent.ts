@@ -47,14 +47,29 @@ export class CalendarAIAgent {
   }
 
   /**
+   * Split duration into focus-minute chunks (e.g. 120 min, focus 50 → [50, 50, 20])
+   */
+  static chunkDurationByFocus(duration: number, focusMinutes: number): number[] {
+    const chunks: number[] = [];
+    let remaining = duration;
+    while (remaining > 0) {
+      chunks.push(Math.min(remaining, focusMinutes));
+      remaining -= focusMinutes;
+    }
+    return chunks;
+  }
+
+  /**
    * Find all empty time slots in the calendar
+   * breakAfterEventsMinutes: gap after each event before next slot can start
    */
   static findEmptySlots(
     existingEvents: CalendarEvent[],
     startDate: Date,
     endDate: Date,
     workStartHour: number = 9,
-    workEndHour: number = 17 
+    workEndHour: number = 18,
+    breakAfterEventsMinutes: number = 0
   ): TimeSlot[] {
     const slots: TimeSlot[] = [];
     const currentDate = new Date(startDate);
@@ -104,8 +119,12 @@ export class CalendarAIAgent {
             });
           }
         }
-        // Move current time to end of this event
-        currentTime = new Date(event.end);
+        // Move current time to end of this event + break before next slot.
+        // Use max() so overlapping events don't move currentTime backwards.
+        const afterBreak = new Date(event.end.getTime() + breakAfterEventsMinutes * 60 * 1000);
+        if (afterBreak > currentTime) {
+          currentTime = afterBreak;
+        }
       }
 
       // Check for slot after last event
@@ -128,6 +147,8 @@ export class CalendarAIAgent {
 
   /**
    * Distribute tasks across available calendar slots
+   * breakAfterEventsMinutes: gap after each event/task before next can be scheduled
+   * focusMinutes: max chunk size (tasks longer than this get split)
    */
   static distributeTasks(
     tasks: Task[],
@@ -135,80 +156,155 @@ export class CalendarAIAgent {
     startDate: Date,
     endDate: Date,
     workStartHour: number = 9,
-    workEndHour: number = 17
+    workEndHour: number = 18,
+    breakAfterEventsMinutes: number = 0,
+    focusMinutes: number = 50
   ): CalendarEvent[] {
-    // Calculate durations for all tasks
-    const taskDurations = tasks.map(task => ({
-      task,
-      duration: this.calculateTaskDuration(task),
-      priority: task.priority === 'high' ? 3 : task.priority === 'medium' ? 2 : 1,
-    }));
+    // Expand tasks into focus-minute chunks
+    const taskChunks: { task: Task; duration: number; partIndex: number; totalParts: number; priority: number }[] = [];
+    for (const task of tasks) {
+      const fullDuration = this.calculateTaskDuration(task);
+      const priority = task.priority === 'high' ? 3 : task.priority === 'medium' ? 2 : 1;
+      const chunks = this.chunkDurationByFocus(fullDuration, focusMinutes);
+      chunks.forEach((duration, partIndex) => {
+        taskChunks.push({
+          task,
+          duration,
+          partIndex,
+          totalParts: chunks.length,
+          priority,
+        });
+      });
+    }
 
     // Sort by priority (high first), then by duration (shorter first for better fit)
-    taskDurations.sort((a, b) => {
+    taskChunks.sort((a, b) => {
       if (a.priority !== b.priority) {
         return b.priority - a.priority;
       }
       return a.duration - b.duration;
     });
 
-    // Find all empty slots with custom work hours
-    const emptySlots = this.findEmptySlots(existingEvents, startDate, endDate, workStartHour, workEndHour);
+    // Find all empty slots with custom work hours and break
+    const emptySlots = this.findEmptySlots(
+      existingEvents,
+      startDate,
+      endDate,
+      workStartHour,
+      workEndHour,
+      breakAfterEventsMinutes
+    );
     
     // Sort slots by start time
     emptySlots.sort((a, b) => a.start.getTime() - b.start.getTime());
 
     const scheduledEvents: CalendarEvent[] = [];
-    const usedSlots: boolean[] = new Array(emptySlots.length).fill(false);
 
-    // Try to fit each task into available slots
-    for (const { task, duration } of taskDurations) {
+    // Try to fit each task chunk into available slots
+    for (const { task, duration, partIndex, totalParts } of taskChunks) {
       let scheduled = false;
+      const displayTitle =
+        totalParts > 1 ? `${task.title} (Part ${partIndex + 1}/${totalParts})` : task.title;
 
-      // Try to find a slot that fits
+      // Try to find a slot that fits this chunk
       for (let i = 0; i < emptySlots.length; i++) {
-        if (usedSlots[i]) continue;
-
         const slot = emptySlots[i];
-        
-        // Check if task fits in this slot
-        if (slot.duration >= duration) {
-          const eventEnd = new Date(slot.start);
-          eventEnd.setMinutes(eventEnd.getMinutes() + duration);
+        const slotDuration = Math.round(
+          (slot.end.getTime() - slot.start.getTime()) / (1000 * 60)
+        );
 
-          scheduledEvents.push({
-            id: `scheduled-${task.id}-${Date.now()}-${i}`,
-            title: task.title,
-            start: new Date(slot.start),
-            end: eventEnd,
-            taskId: task.id,
-            isScheduled: true,
-            color: task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#10b981',
-          });
+        if (slotDuration < duration || slotDuration < 15) {
+          // Skip tiny or too-small slots
+          continue;
+        }
 
-          // Mark slot as used
-          usedSlots[i] = true;
-          
-          // If slot has remaining time, create a new slot
-          const remainingTime = slot.duration - duration;
-          if (remainingTime >= 15) {
-            emptySlots.push({
-              start: eventEnd,
+        const eventStart = new Date(slot.start);
+        const eventEnd = new Date(eventStart.getTime() + duration * 60 * 1000);
+
+        scheduledEvents.push({
+          id: `scheduled-${task.id}-${Date.now()}-${i}-p${partIndex}`,
+          title: displayTitle,
+          start: eventStart,
+          end: eventEnd,
+          taskId: task.id,
+          isScheduled: true,
+          color:
+            task.priority === 'high'
+              ? '#ef4444'
+              : task.priority === 'medium'
+              ? '#f59e0b'
+              : '#10b981',
+        });
+
+        // Shrink or remove the slot after scheduling this chunk, respecting break
+        const slotAfterBreak = new Date(
+          eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
+        );
+        if (slotAfterBreak >= slot.end) {
+          // No time left in this slot
+          emptySlots.splice(i, 1);
+        } else {
+          const remainingTime = Math.round(
+            (slot.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
+          );
+          if (remainingTime < 15) {
+            emptySlots.splice(i, 1);
+          } else {
+            emptySlots[i] = {
+              start: slotAfterBreak,
               end: slot.end,
               duration: remainingTime,
-            });
-            usedSlots.push(false);
+            };
           }
-
-          scheduled = true;
-          break;
         }
+
+        scheduled = true;
+        break;
       }
 
-      // If task doesn't fit in any single slot, try to split it
-      if (!scheduled) {
-        const splitEvents = this.splitTaskAcrossSlots(task, duration, emptySlots, usedSlots);
+      // If task chunk doesn't fit in any single slot, try to split it across multiple
+      if (!scheduled && duration > 0) {
+        const splitEvents = this.splitTaskAcrossSlots(
+          task,
+          displayTitle,
+          duration,
+          emptySlots,
+          breakAfterEventsMinutes
+        );
         scheduledEvents.push(...splitEvents);
+      }
+    }
+
+    // Ensure parts for the same task are numbered in chronological order.
+    // This avoids cases where a later part label (e.g. Part 8/8) appears
+    // in an earlier time slot than Part 1/8 due to how chunks were filled.
+    const tasksById = new Map<string, Task>();
+    for (const task of tasks) {
+      tasksById.set(task.id, task);
+    }
+
+    const eventsByTaskId = new Map<string, CalendarEvent[]>();
+    for (const event of scheduledEvents) {
+      if (!event.taskId) continue;
+      const group = eventsByTaskId.get(event.taskId) || [];
+      group.push(event);
+      eventsByTaskId.set(event.taskId, group);
+    }
+
+    for (const [taskId, taskEvents] of eventsByTaskId.entries()) {
+      const task = tasksById.get(taskId);
+      if (!task) continue;
+
+      // Sort task's events by their actual time
+      taskEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+      const totalParts = taskEvents.length;
+
+      for (let index = 0; index < taskEvents.length; index++) {
+        const event = taskEvents[index];
+        event.title =
+          totalParts > 1
+            ? `${task.title} (Part ${index + 1}/${totalParts})`
+            : task.title;
       }
     }
 
@@ -220,36 +316,68 @@ export class CalendarAIAgent {
    */
   private static splitTaskAcrossSlots(
     task: Task,
+    displayTitle: string,
     duration: number,
     emptySlots: TimeSlot[],
-    usedSlots: boolean[]
+    breakAfterEventsMinutes: number = 0
   ): CalendarEvent[] {
     const events: CalendarEvent[] = [];
     let remainingDuration = duration;
-    let taskPart = 1;
+    let partIndex = 1;
 
-    for (let i = 0; i < emptySlots.length && remainingDuration > 0; i++) {
-      if (usedSlots[i]) continue;
-
+    for (let i = 0; i < emptySlots.length && remainingDuration > 0; ) {
       const slot = emptySlots[i];
-      const durationToUse = Math.min(remainingDuration, slot.duration);
+      const slotDuration = Math.round(
+        (slot.end.getTime() - slot.start.getTime()) / (1000 * 60)
+      );
 
-      const eventEnd = new Date(slot.start);
-      eventEnd.setMinutes(eventEnd.getMinutes() + durationToUse);
+      if (slotDuration < 15) {
+        emptySlots.splice(i, 1);
+        continue;
+      }
+
+      const durationToUse = Math.min(remainingDuration, slotDuration);
+      const eventStart = new Date(slot.start);
+      const eventEnd = new Date(eventStart.getTime() + durationToUse * 60 * 1000);
 
       events.push({
-        id: `scheduled-${task.id}-${Date.now()}-${i}-part${taskPart}`,
-        title: `${task.title} (Part ${taskPart})`,
-        start: new Date(slot.start),
+        id: `scheduled-${task.id}-${Date.now()}-${i}-part${partIndex}`,
+        title: displayTitle,
+        start: eventStart,
         end: eventEnd,
         taskId: task.id,
         isScheduled: true,
-        color: task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#10b981',
+        color:
+          task.priority === 'high'
+            ? '#ef4444'
+            : task.priority === 'medium'
+            ? '#f59e0b'
+            : '#10b981',
       });
 
-      usedSlots[i] = true;
       remainingDuration -= durationToUse;
-      taskPart++;
+      partIndex++;
+
+      const slotAfterBreak = new Date(
+        eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
+      );
+      if (slotAfterBreak >= slot.end) {
+        emptySlots.splice(i, 1);
+      } else {
+        const remainingTime = Math.round(
+          (slot.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
+        );
+        if (remainingTime < 15) {
+          emptySlots.splice(i, 1);
+        } else {
+          emptySlots[i] = {
+            start: slotAfterBreak,
+            end: slot.end,
+            duration: remainingTime,
+          };
+          i++;
+        }
+      }
     }
 
     return events;
