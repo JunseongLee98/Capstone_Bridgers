@@ -1228,9 +1228,9 @@ export default function Home() {
       </header>
 
       {/* Full-width Calendar */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full w-full p-4">
-          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6">
+          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-gray-800">Calendar</h2>
@@ -1249,11 +1249,13 @@ export default function Home() {
                 Add Task
               </button>
             </div>
+            <div className="flex-1 min-h-0">
             <Calendar
               events={allEvents}
               onSelectSlot={handleSelectSlot}
               onSelectEvent={handleSelectEvent}
             />
+            </div>
           </div>
         </div>
       </div>
