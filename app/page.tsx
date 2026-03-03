@@ -757,13 +757,13 @@ export default function Home() {
   const incompleteTasksCount = tasks.filter(t => !t.completedAt).length;
 
   return (
-    <main className="h-screen flex flex-col bg-[#f4f0ff]">
+    <main className="h-screen flex flex-col bg-white">
       {/* Header with dropdowns */}
-      <header className="bg-gradient-to-r from-[#2b1b52] via-[#5b3fa8] to-[#c9b6ff] shadow-md">
-        <div className="max-w-6xl mx-auto px-4 py-3">
+      <header className="p-4">
+        <div className="bg-primary-dark rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center gap-3">
-              <div className="relative h-9 w-[140px]">
+              <div className="relative h-12 w-[150px]">
                 <Image
                   src="/cadence-logo-white.png"
                   alt="Cadence"
@@ -774,7 +774,7 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="flex items-center gap-3 relative">
+            <div className="flex items-center gap-4 relative">
               {/* ICS File Import & Subscribe */}
               <input
                 ref={fileInputRef}
@@ -784,11 +784,11 @@ export default function Home() {
                 className="hidden"
                 disabled={isImportingICS}
               />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4">
                 <button
                   onClick={triggerFileInput}
                   disabled={isImportingICS}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-purple-100 border border-white/20 hover:bg-white/16 transition-colors disabled:opacity-50 text-sm"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-sm"
                   title="Import ICS calendar file"
                 >
                   <Upload size={20} />
@@ -796,7 +796,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setShowSubscriptionDialog(!showSubscriptionDialog)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-400 text-[#1f1235] font-semibold shadow-md hover:bg-purple-300 transition-colors text-sm"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-sm`}
                   title="Subscribe to ICS calendar URL"
                 >
                   <Link2 size={20} />
@@ -807,10 +807,10 @@ export default function Home() {
               {/* Subscription Dialog */}
               {showSubscriptionDialog && (
                 <div className="absolute right-0 top-12 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 p-4">
-                  <h3 className="text-lg font-bold text-gray-800 mb-3">Subscribe to Calendar</h3>
+                  <h3 className="text-lg font-bold text-primary mb-3">Subscribe to Calendar</h3>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-primary mb-1">
                         Calendar URL *
                       </label>
                       <input
@@ -825,7 +825,7 @@ export default function Home() {
                       </p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-primary mb-1">
                         Calendar Name (Optional)
                       </label>
                       <input
@@ -884,7 +884,7 @@ export default function Home() {
                       <button
                         onClick={handleAddICSSubscription}
                         disabled={isLoadingICSSubscription || !newSubscriptionUrl.trim()}
-                        className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="flex-1 px-4 py-2 bg-secondary/80 text-white rounded-lg hover:bg-secondary disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
                       >
                         {isLoadingICSSubscription ? 'Adding...' : 'Add Subscription'}
                       </button>
@@ -894,7 +894,7 @@ export default function Home() {
                           setNewSubscriptionUrl('');
                           setNewSubscriptionName('');
                         }}
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                        className="px-4 py-2 bg-neutral text-primary rounded-lg hover:bg-neutral/80 transition-colors"
                       >
                         Cancel
                       </button>
@@ -909,8 +909,7 @@ export default function Home() {
                   onClick={() => {
                     setTasksDropdownOpen(!tasksDropdownOpen);
                   }}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#f97316] via-[#facc15] to-[#f97316] text-slate-900 font-semibold shadow-[0_0_0_1px_rgba(255,255,255,0.35)] hover:shadow-[0_0_0_2px_rgba(255,255,255,0.6)] transition-all text-sm"
-                >
+                  className={`flex items-center gap-3 px-6 py-2 rounded-lg bg-primary-light text-white font-semibold text-sm border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
                   <Menu size={20} />
                   Tasks
                   {incompleteTasksCount > 0 && (
@@ -918,14 +917,14 @@ export default function Home() {
                       {incompleteTasksCount}
                     </span>
                   )}
-                  <ChevronDown size={16} />
+                  <ChevronDown size={18} />
                 </button>
                 
                 {tasksDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-[calc(100vh-120px)] overflow-y-auto">
                     <div className="p-4 border-b border-gray-200">
                       <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-gray-800">Tasks</h2>
+                        <h2 className="text-xl font-bold text-primary">Tasks</h2>
                         <div className="flex gap-2">
                           <input
                             ref={tasksFileInputRef}
@@ -938,7 +937,7 @@ export default function Home() {
                           <button
                             onClick={triggerTasksFileInput}
                             disabled={isImportingICS}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-secondary-inactive text-white text-xs rounded-lg hover:bg-secondary-inactive/85 transition-colors disabled:opacity-50"
                             title="Import tasks from ICS file"
                           >
                             <Upload size={14} />
@@ -946,7 +945,7 @@ export default function Home() {
                           </button>
                           <button
                             onClick={() => setIsAddingTask(!isAddingTask)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-white text-sm rounded-lg hover:bg-secondary/90 transition-colors"
                           >
                             <Plus size={16} />
                             Add Task
@@ -1229,13 +1228,13 @@ export default function Home() {
       </header>
 
       {/* Full-width Calendar */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full w-full p-4">
-          <div className="h-full w-full bg-white rounded-lg shadow-lg p-6">
+          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-gray-800">Calendar</h2>
-                <p className="text-xs text-gray-500">Click and drag to create events</p>
+                <h2 className="text-base font-semibold text-gray-800">Calendar</h2>
+                <p className="text-sm text-gray-500">Click and drag to create events</p>
               </div>
               <button
                 onClick={() => {
@@ -1243,18 +1242,20 @@ export default function Home() {
                   setTasksDropdownOpen(false);
                   setIsAddingTask(false);
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#f97316] via-[#facc15] to-[#f97316] text-slate-900 font-semibold shadow-md hover:shadow-lg transition-all"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-light text-white border border-white/25 font-semibold shadow-md hover:bg-primary-light/90 transition-all"
                 title="Add a new task"
               >
                 <Plus size={18} />
                 Add Task
               </button>
             </div>
+            <div className="flex-1 min-h-0">
             <Calendar
               events={allEvents}
               onSelectSlot={handleSelectSlot}
               onSelectEvent={handleSelectEvent}
             />
+            </div>
           </div>
         </div>
       </div>
@@ -1265,7 +1266,7 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="text-xl font-bold text-gray-800">Add Task</h3>
+                <h3 className="text-xl font-bold text-primary">Add Task</h3>
                 <p className="text-sm text-gray-600">This will be scheduled automatically</p>
               </div>
               <button
@@ -1394,14 +1395,14 @@ export default function Home() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors"
                 >
                   Add Task
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddTaskDialog(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/80 transition-colors"
                 >
                   Cancel
                 </button>
@@ -1601,7 +1602,7 @@ export default function Home() {
       {showSettingsDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-gray-800 mb-1">Settings</h3>
+            <h3 className="text-xl font-bold text-primary mb-1">Settings</h3>
             <p className="text-sm text-gray-600 mb-6">Configure scheduling and calendar behavior</p>
             
             <div className="space-y-6">
@@ -1697,7 +1698,7 @@ export default function Home() {
                   setShowSettingsDialog(false);
                 }}
                 disabled={tempWorkHours.startHour >= tempWorkHours.endHour}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
               >
                 Save
               </button>
@@ -1708,7 +1709,7 @@ export default function Home() {
                   setTempBreakAfterEvents(breakAfterEvents);
                   setTempFocusMinutes(focusMinutes);
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/90 transition-colors"
               >
                 Cancel
               </button>

@@ -19,7 +19,22 @@ module.exports = {
           700: '#0369a1',
           800: '#075985',
           900: '#0c4a6e',
+          dark: '#373147',
+          light: '#8677AD'
         },
+
+        secondary: {
+          DEFAULT: '#60547B',
+          inactive: '#A9A1B5'
+        },
+
+        text: {
+          primary: '#3B3B3B',
+          secondary: '#979797',
+        },
+
+        background: '#F7F6FF',
+        neutral: '#CFCFDA',
       },
     },
   },
