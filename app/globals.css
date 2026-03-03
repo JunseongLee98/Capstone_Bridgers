@@ -52,6 +52,7 @@ body {
 .rbc-month-view,
 .rbc-agenda-view {
   background-color: white;
+  border-radius: 8px;
 }
 
 .rbc-toolbar .rbc-btn-group button {
