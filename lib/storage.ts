@@ -2,6 +2,8 @@ import { Task, CalendarEvent } from '@/types';
 
 const TASKS_KEY = 'cadence_tasks';
 const EVENTS_KEY = 'cadence_events';
+const GOOGLE_TOKENS_KEY = 'cadence_google_tokens';
+const GOOGLE_EVENTS_KEY = 'cadence_google_events';
 const ICS_SUBSCRIPTIONS_KEY = 'cadence_ics_subscriptions';
 const WORK_HOURS_KEY = 'cadence_work_hours';
 const BREAK_AFTER_EVENTS_KEY = 'cadence_break_after_events';
@@ -57,6 +59,24 @@ export const storage = {
   saveEvents(events: CalendarEvent[]): void {
     if (typeof window === 'undefined') return;
     localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+  },
+
+  // Google Calendar Tokens
+  getGoogleTokens(): { access_token?: string; refresh_token?: string } | null {
+    if (typeof window === 'undefined') return null;
+    const data = localStorage.getItem(GOOGLE_TOKENS_KEY);
+    return data ? JSON.parse(data) : null;
+  },
+
+  saveGoogleTokens(tokens: { access_token?: string; refresh_token?: string }): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(GOOGLE_TOKENS_KEY, JSON.stringify(tokens));
+  },
+
+  clearGoogleTokens(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(GOOGLE_TOKENS_KEY);
+    localStorage.removeItem(GOOGLE_EVENTS_KEY);
   },
 
   // ICS Calendar Subscriptions
