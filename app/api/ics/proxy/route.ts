@@ -26,11 +26,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch the ICS file
+    // Fetch the ICS file (no cache so subscriptions stay live)
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Cadence Calendar App',
       },
+      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(content, {
       headers: {
         'Content-Type': 'text/calendar',
-        'Cache-Control': 'public, max-age=300', // Cache for 5 minutes
+        'Cache-Control': 'no-store, max-age=0', // Always fetch fresh so subscriptions feel live
       },
     });
   } catch (error: any) {

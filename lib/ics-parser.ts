@@ -218,7 +218,7 @@ export async function fetchICSFromURL(url: string): Promise<CalendarEvent[]> {
   try {
     // Use proxy API route to avoid CORS issues
     const proxyUrl = `/api/ics/proxy?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
+    const response = await fetch(proxyUrl, { cache: 'no-store' });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

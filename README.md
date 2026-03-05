@@ -2,6 +2,10 @@
 
 AI-powered calendar app that helps students learn and manage time. The AI agent automatically detects how long tasks take on average and distributes work evenly across available calendar slots.
 
+## Chrome Extension (Standalone) Plan
+
+A full plan for converting Cadence into a **standalone Chrome extension** (no backend) that works with Google Calendar—including optional injection into calendar.google.com—is in **[CHROME_EXTENSION_PLAN.md](./CHROME_EXTENSION_PLAN.md)**. It covers architecture, phased conversion (shell → storage → Google Calendar → ICS → AI → content script), manifest and build, and an implementation checklist.
+
 ## Features
 
 - 📅 **Interactive Calendar**: View your schedule in month, week, or day view
@@ -66,6 +70,10 @@ cadence/
 - **Tailwind CSS** - Styling
 - **React Big Calendar** - Calendar component
 - **Lucide React** - Icons
+
+## Documentation
+
+- **[CHROME_EXTENSION_PLAN.md](./CHROME_EXTENSION_PLAN.md)** – Plan for converting Cadence into a standalone Chrome extension (no backend, optional Google Calendar injection).
 
 ## Usage Tips
 

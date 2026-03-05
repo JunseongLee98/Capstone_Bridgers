@@ -8,7 +8,7 @@ import { formatDateToLocalISO } from '@/lib/date-utils';
 import Calendar from '@/components/Calendar';
 import { v4 as uuidv4 } from 'uuid';
 import Image from 'next/image';
-import { Plus, X, Clock, CheckCircle2, ChevronDown, Menu, Calendar as CalendarIcon, Upload, Link2, Trash2, CheckSquare, Settings } from 'lucide-react';
+import { Plus, X, Clock, CheckCircle2, ChevronDown, Menu, Calendar as CalendarIcon, Upload, Link2, Trash2, CheckSquare, Settings, Sparkles } from 'lucide-react';
 import { parseICSFileFromFile, parseICSFileFromFileAsTasks, fetchICSFromURL } from '@/lib/ics-parser';
 import { formatMinutesToHoursMinutes } from '@/lib/time-utils';
 
@@ -39,8 +39,10 @@ export default function Home() {
   const [newSubscriptionUrl, setNewSubscriptionUrl] = useState('');
   const [newSubscriptionName, setNewSubscriptionName] = useState('');
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
+  const [openColorMenuId, setOpenColorMenuId] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventDialog, setShowEventDialog] = useState(false);
+  const [isDecomposingEvent, setIsDecomposingEvent] = useState(false);
   const [conversionDuration, setConversionDuration] = useState(60); // Default duration in minutes
   const [workHours, setWorkHours] = useState({ startHour: 9, endHour: 18 });
   const [showWorkHoursDialog, setShowWorkHoursDialog] = useState(false);
@@ -58,6 +60,7 @@ export default function Home() {
   const [conversionDurationCustomHours, setConversionDurationCustomHours] = useState(1);
 
   const tasksDropdownRef = useRef<HTMLDivElement>(null);
+  const subscriptionColorMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tasksFileInputRef = useRef<HTMLInputElement>(null);
   
@@ -74,14 +77,16 @@ export default function Home() {
     icsSubscribedEventsRef.current = icsSubscribedEvents;
   }, [icsSubscribedEvents]);
 
-  // Pastel color palette for subscribed ICS calendars (easy on the eyes)
+  // Color palette for subscribed ICS calendars (pastels + a few stronger options)
   const ICS_SUBSCRIPTION_COLORS = [
-    '#bfdbfe', // pastel blue
-    '#bbf7d0', // pastel green
-    '#fed7aa', // pastel orange
-    '#fecaca', // pastel red
-    '#e9d5ff', // pastel purple
-    '#fbcfe8', // pastel pink
+    '#bfdbfe', '#93c5fd', '#60a5fa', // blues
+    '#bbf7d0', '#86efac', '#4ade80', // greens
+    '#fed7aa', '#fdba74', '#fb923c', // oranges
+    '#fecaca', '#fca5a5', '#f87171', // reds
+    '#e9d5ff', '#d8b4fe', '#c084fc', // purples
+    '#fbcfe8', '#f9a8d4', '#f472b6', // pinks
+    '#e0e7ff', '#c7d2fe', '#a5b4fc', // indigo
+    '#fef3c7', '#fde68a', '#fcd34d', // yellows
   ];
 
   // Load data from localStorage on mount
@@ -142,15 +147,24 @@ export default function Home() {
     }
   }, []);
 
-  // Auto-refresh ICS subscriptions every 30 minutes
+  // Auto-refresh ICS subscriptions more often so they feel live
   useEffect(() => {
     if (icsSubscriptions.length === 0) return;
 
-    const interval = setInterval(() => {
-      fetchAllICSSubscriptions(icsSubscriptions);
-    }, 30 * 60 * 1000); // 30 minutes
+    const refresh = () => fetchAllICSSubscriptions(icsSubscriptions);
+    const intervalMs = 5 * 60 * 1000; // 5 minutes
+    const interval = setInterval(refresh, intervalMs);
 
-    return () => clearInterval(interval);
+    // Also refresh when user returns to the tab so calendar is up to date
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [icsSubscriptions]);
 
   // Fetch Google Calendar events
@@ -429,23 +443,14 @@ export default function Home() {
     }
   };
 
-  // Change color of an ICS subscription by cycling through the palette
-  const handleCycleICSSubscriptionColor = (id: string) => {
+  // Set color of an ICS subscription (from palette or custom picker)
+  const handleSetICSSubscriptionColor = (id: string, color: string) => {
+    setOpenColorMenuId(null);
     setICSSubscriptions(prev => {
-      const updated = prev.map(sub => {
-        if (sub.id !== id) return sub;
-        const currentColor = sub.color || ICS_SUBSCRIPTION_COLORS[0];
-        const currentIndex =
-          ICS_SUBSCRIPTION_COLORS.indexOf(currentColor) === -1
-            ? 0
-            : ICS_SUBSCRIPTION_COLORS.indexOf(currentColor);
-        const nextColor =
-          ICS_SUBSCRIPTION_COLORS[(currentIndex + 1) % ICS_SUBSCRIPTION_COLORS.length];
-        return { ...sub, color: nextColor };
-      });
-      // Persist updated colors
+      const updated = prev.map(sub =>
+        sub.id === id ? { ...sub, color } : sub
+      );
       storage.saveICSSubscriptions(updated);
-      // Also refresh subscribed events with new colors
       fetchAllICSSubscriptions(updated);
       return updated;
     });
@@ -477,6 +482,18 @@ export default function Home() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Close subscription color palette when clicking outside
+  useEffect(() => {
+    if (!openColorMenuId) return;
+    const close = (e: MouseEvent) => {
+      if (subscriptionColorMenuRef.current && !subscriptionColorMenuRef.current.contains(e.target as Node)) {
+        setOpenColorMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openColorMenuId]);
 
   const handleAddTask = async (taskData: {
     title: string;
@@ -721,6 +738,84 @@ export default function Home() {
     }
   };
 
+  // Break down event into steps using AI (reads description, creates subtasks, schedules them)
+  const handleBreakDownWithAI = async (event: CalendarEvent) => {
+    setIsDecomposingEvent(true);
+    try {
+      const res = await fetch('/api/assignments/decompose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: event.title,
+          description: event.description ?? undefined,
+          dueDate: event.start.toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+      }
+      const { subtasks } = await res.json();
+      if (!Array.isArray(subtasks) || subtasks.length === 0) {
+        throw new Error('No subtasks returned');
+      }
+
+      const newTasks: Task[] = subtasks.map(
+        (st: { title: string; description?: string; estimatedMinutes?: number; order: number }) => ({
+          id: uuidv4(),
+          title: st.title,
+          description: st.description,
+          estimatedDuration: st.estimatedMinutes ?? 60,
+          priority: 'medium',
+          category: '',
+          dueDate: event.start ? new Date(event.start) : undefined,
+          createdAt: new Date(),
+          actualDurations: [],
+        })
+      );
+
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 14);
+      endDate.setHours(23, 59, 59, 999);
+      const allExistingEvents = [
+        ...events,
+        ...googleEventsRef.current,
+        ...icsSubscribedEventsRef.current,
+      ];
+      const workHours = storage.getWorkHours();
+      const breakMinutes = storage.getBreakAfterEvents();
+      const focusMinutes = storage.getFocusMinutes();
+      const scheduledEvents = CalendarAIAgent.distributeTasks(
+        newTasks,
+        allExistingEvents,
+        startDate,
+        endDate,
+        workHours.startHour,
+        workHours.endHour,
+        breakMinutes,
+        focusMinutes
+      );
+
+      setTasks(prev => [...prev, ...newTasks]);
+      setEvents(prev => [...prev, ...scheduledEvents]);
+
+      setShowEventDialog(false);
+      setSelectedEvent(null);
+      if (confirm(`${newTasks.length} subtasks created and scheduled. Remove this event from the calendar?`)) {
+        setEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
+        setGoogleEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
+        setICSSubscribedEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
+      }
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'Failed to break down with AI. Is Ollama running?');
+    } finally {
+      setIsDecomposingEvent(false);
+    }
+  };
+
   // Delete event
   const handleDeleteEvent = (event: CalendarEvent) => {
     if (confirm('Delete this event?')) {
@@ -838,9 +933,19 @@ export default function Home() {
                     </div>
                     {icsSubscriptions.length > 0 && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Subscribed Calendars
-                        </label>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <label className="text-sm font-medium text-gray-700">
+                            Subscribed Calendars
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => fetchAllICSSubscriptions()}
+                            disabled={isLoadingICSSubscription}
+                            className="text-xs px-2 py-1 text-primary-600 hover:bg-primary-50 rounded border border-primary-200 transition-colors disabled:opacity-50"
+                          >
+                            {isLoadingICSSubscription ? 'Refreshing…' : 'Refresh all'}
+                          </button>
+                        </div>
                         <div className="space-y-1 max-h-32 overflow-y-auto">
                           {icsSubscriptions.map((sub) => (
                             <div
@@ -859,14 +964,49 @@ export default function Home() {
                                   <p className="text-xs text-gray-500 truncate">{sub.url}</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1 ml-2">
+                              <div
+                                ref={openColorMenuId === sub.id ? subscriptionColorMenuRef : undefined}
+                                className="flex items-center gap-1 ml-2 relative"
+                              >
                                 <button
-                                  onClick={() => handleCycleICSSubscriptionColor(sub.id)}
-                                  className="px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
-                                  title="Change calendar color"
+                                  type="button"
+                                  onClick={() => setOpenColorMenuId(openColorMenuId === sub.id ? null : sub.id)}
+                                  className="px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors flex items-center gap-1"
+                                  title="Choose calendar color"
                                 >
+                                  <span
+                                    className="w-3.5 h-3.5 rounded border border-gray-300"
+                                    style={{ backgroundColor: sub.color || '#8b5cf6' }}
+                                  />
                                   Color
                                 </button>
+                                {openColorMenuId === sub.id && (
+                                  <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[180px]">
+                                    <p className="text-xs font-medium text-gray-600 mb-2">Pick a color</p>
+                                    <div className="grid grid-cols-6 gap-1 mb-2">
+                                      {ICS_SUBSCRIPTION_COLORS.map((c) => (
+                                        <button
+                                          key={c}
+                                          type="button"
+                                          onClick={() => handleSetICSSubscriptionColor(sub.id, c)}
+                                          className="w-6 h-6 rounded border-2 border-gray-200 hover:border-gray-400 transition-colors"
+                                          style={{ backgroundColor: c }}
+                                          title={c}
+                                        />
+                                      ))}
+                                    </div>
+                                    <div className="flex items-center gap-2 border-t border-gray-100 pt-2">
+                                      <input
+                                        type="color"
+                                        value={sub.color?.startsWith('#') ? sub.color : '#8b5cf6'}
+                                        onChange={(e) => handleSetICSSubscriptionColor(sub.id, e.target.value)}
+                                        className="w-8 h-8 cursor-pointer rounded border border-gray-300"
+                                        title="Custom color"
+                                      />
+                                      <span className="text-xs text-gray-500">Custom</span>
+                                    </div>
+                                  </div>
+                                )}
                                 <button
                                   onClick={() => handleRemoveICSSubscription(sub.id)}
                                   className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -1414,15 +1554,17 @@ export default function Home() {
 
       {/* Event Dialog - Convert to Task or Delete */}
       {showEventDialog && selectedEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 my-8 max-h-[85vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Convert Event to Task</h3>
             <div className="mb-4 space-y-3">
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-1">Event:</p>
                 <p className="text-lg text-gray-900">{selectedEvent.title}</p>
                 {selectedEvent.description && (
-                  <p className="text-sm text-gray-600 mt-1">{selectedEvent.description}</p>
+                  <p className="text-sm text-gray-600 mt-1 whitespace-pre-line break-words max-h-40 overflow-y-auto pr-1">
+                    {selectedEvent.description}
+                  </p>
                 )}
                 <div className="mt-2 text-xs text-gray-500">
                   <p>Date: {selectedEvent.start.toLocaleDateString()}</p>
@@ -1492,7 +1634,30 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => handleBreakDownWithAI(selectedEvent)}
+                disabled={isDecomposingEvent}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isDecomposingEvent ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    Breaking down with AI…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} />
+                    Break down with AI
+                  </>
+                )}
+              </button>
+              <p className="text-xs text-gray-500 text-center">
+                Reads the event description and creates multiple subtasks with steps, then schedules them.
+              </p>
+            </div>
+            <div className="flex gap-3 mt-3">
               <button
                 onClick={() => handleConvertEventToTask(selectedEvent)}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
