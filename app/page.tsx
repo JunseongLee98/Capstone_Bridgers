@@ -27,9 +27,6 @@ export default function Home() {
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [stats, setStats] = useState<any[]>([]);
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
-  const [isLoadingGoogleEvents, setIsLoadingGoogleEvents] = useState(false);
   const [isImportingICS, setIsImportingICS] = useState(false);
   const [icsSubscribedEvents, setICSSubscribedEvents] = useState<CalendarEvent[]>([]);
   const [icsSubscriptions, setICSSubscriptions] = useState<
@@ -64,15 +61,9 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tasksFileInputRef = useRef<HTMLInputElement>(null);
   
-  // Use refs to track latest state for scheduling
-  const googleEventsRef = useRef<CalendarEvent[]>([]);
+  // Use ref to track latest ICS subscribed events for scheduling
   const icsSubscribedEventsRef = useRef<CalendarEvent[]>([]);
-  
-  // Keep refs in sync with state
-  useEffect(() => {
-    googleEventsRef.current = googleEvents;
-  }, [googleEvents]);
-  
+
   useEffect(() => {
     icsSubscribedEventsRef.current = icsSubscribedEvents;
   }, [icsSubscribedEvents]);
@@ -107,13 +98,6 @@ export default function Home() {
     setFocusMinutes(storage.getFocusMinutes());
     setTempFocusMinutes(storage.getFocusMinutes());
 
-    // Check for Google Calendar connection
-    const tokens = storage.getGoogleTokens();
-    if (tokens?.access_token) {
-      setGoogleConnected(true);
-      fetchGoogleCalendarEvents();
-    }
-
     // Load ICS subscriptions
     const rawSubscriptions = storage.getICSSubscriptions();
     // Ensure each subscription has a color assigned
@@ -130,21 +114,6 @@ export default function Home() {
       fetchAllICSSubscriptions(subscriptionsWithColors);
     }
 
-    // Handle OAuth callback from URL query params
-    const urlParams = new URLSearchParams(window.location.search);
-    const accessToken = urlParams.get('access_token');
-    const refreshToken = urlParams.get('refresh_token');
-    
-    if (accessToken) {
-      storage.saveGoogleTokens({
-        access_token: accessToken,
-        refresh_token: refreshToken || undefined,
-      });
-      setGoogleConnected(true);
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
-      fetchGoogleCalendarEvents();
-    }
   }, []);
 
   // Auto-refresh ICS subscriptions more often so they feel live
@@ -166,85 +135,6 @@ export default function Home() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [icsSubscriptions]);
-
-  // Fetch Google Calendar events
-  const fetchGoogleCalendarEvents = async () => {
-    const tokens = storage.getGoogleTokens();
-    if (!tokens?.access_token) return;
-
-    setIsLoadingGoogleEvents(true);
-    try {
-      const now = new Date();
-      const timeMin = now.toISOString();
-      const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-      const response = await fetch(
-        `/api/calendar/events?access_token=${tokens.access_token}&timeMin=${timeMin}&timeMax=${timeMax}`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const fetchedEvents = data.events.map((event: CalendarEvent) => ({
-          ...event,
-          start: new Date(event.start),
-          end: new Date(event.end),
-        }));
-        setGoogleEvents(fetchedEvents);
-      } else {
-        console.error('Failed to fetch Google Calendar events');
-        if (response.status === 401) {
-          // Token expired, disconnect
-          handleDisconnectGoogle();
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching Google Calendar events:', error);
-    } finally {
-      setIsLoadingGoogleEvents(false);
-    }
-  };
-
-  // Connect to Google Calendar
-  const handleConnectGoogle = async () => {
-    try {
-      const response = await fetch('/api/auth');
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          const errorData = JSON.parse(errorText);
-          alert(`Failed to connect: ${errorData.error || 'Unknown error'}. Make sure you have set up GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env.local file.`);
-        } catch {
-          alert(`Failed to connect: ${response.status} ${response.statusText}. Make sure your API routes are working and environment variables are set.`);
-        }
-        return;
-      }
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        alert(`Failed to connect: ${data.error}. Make sure you have set up GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env.local file.`);
-        return;
-      }
-      
-      if (data.authUrl) {
-        window.location.href = data.authUrl;
-      } else {
-        alert('Failed to get authentication URL. Please check your configuration.');
-      }
-    } catch (error: any) {
-      console.error('Error connecting to Google Calendar:', error);
-      const errorMessage = error.message || 'Network error';
-      alert(`Failed to connect to Google Calendar: ${errorMessage}. Make sure the dev server is running and API routes are accessible.`);
-    }
-  };
-
-  // Disconnect from Google Calendar
-  const handleDisconnectGoogle = () => {
-    storage.clearGoogleTokens();
-    setGoogleConnected(false);
-    setGoogleEvents([]);
-  };
 
   // Handle ICS file import
   const handleImportICS = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -467,9 +357,9 @@ export default function Home() {
 
   // Merge all events for display
   const allEvents = useMemo(() => {
-    const localEvents = events.filter(e => !e.id.startsWith('google-') && !e.id.startsWith('ics-sub-'));
-    return [...localEvents, ...googleEvents, ...icsSubscribedEvents];
-  }, [events, googleEvents, icsSubscribedEvents]);
+    const localEvents = events.filter(e => !e.id.startsWith('ics-sub-'));
+    return [...localEvents, ...icsSubscribedEvents];
+  }, [events, icsSubscribedEvents]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -545,10 +435,9 @@ export default function Home() {
 
     // Use functional update with refs to ensure we have the latest state
     setEvents(prevEvents => {
-      // Use refs to get the latest googleEvents and icsSubscribedEvents
+      // Use ref to get the latest icsSubscribedEvents
       const allExistingEvents = [
-        ...prevEvents, 
-        ...googleEventsRef.current, 
+        ...prevEvents,
         ...icsSubscribedEventsRef.current
       ];
       
@@ -594,7 +483,7 @@ export default function Home() {
 
     // Get current events using functional update to ensure we have latest state
     setEvents(currentEvents => {
-      const allExistingEvents = [...currentEvents, ...googleEvents, ...icsSubscribedEvents];
+      const allExistingEvents = [...currentEvents, ...icsSubscribedEvents];
       
       // Filter out already scheduled tasks (those with taskId in events)
       const scheduledTaskIds = new Set(currentEvents.filter(e => e.taskId).map(e => e.taskId));
@@ -732,8 +621,6 @@ export default function Home() {
     // Optionally remove the event (or keep it)
     if (confirm('Task created and scheduled! Do you want to remove this event from the calendar?')) {
       setEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
-      // Also remove from Google events or ICS subscribed events if applicable
-      setGoogleEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
       setICSSubscribedEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
     }
   };
@@ -781,7 +668,6 @@ export default function Home() {
       endDate.setHours(23, 59, 59, 999);
       const allExistingEvents = [
         ...events,
-        ...googleEventsRef.current,
         ...icsSubscribedEventsRef.current,
       ];
       const workHours = storage.getWorkHours();
@@ -805,7 +691,6 @@ export default function Home() {
       setSelectedEvent(null);
       if (confirm(`${newTasks.length} subtasks created and scheduled. Remove this event from the calendar?`)) {
         setEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
-        setGoogleEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
         setICSSubscribedEvents(prevEvents => prevEvents.filter(e => e.id !== event.id));
       }
     } catch (e) {
@@ -820,8 +705,6 @@ export default function Home() {
   const handleDeleteEvent = (event: CalendarEvent) => {
     if (confirm('Delete this event?')) {
       setEvents(events.filter(e => e.id !== event.id));
-      // Also remove from other event sources if applicable
-      setGoogleEvents(googleEvents.filter(e => e.id !== event.id));
       setICSSubscribedEvents(icsSubscribedEvents.filter(e => e.id !== event.id));
     }
     setShowEventDialog(false);

@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "date-fns": "^3.6.0",
-    "googleapis": "^168.0.0",
     "ical.js": "^2.2.1",
     "lucide-react": "^0.427.0",
     "moment": "^2.30.1",
