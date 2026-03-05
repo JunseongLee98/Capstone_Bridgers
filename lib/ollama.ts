@@ -34,10 +34,13 @@ export async function ollamaChat(
   if (baseUrl.endsWith('/api')) baseUrl = baseUrl.slice(0, -4);
   const model = options.model ?? process.env.OLLAMA_MODEL ?? DEFAULT_MODEL;
   const stream = options.stream ?? false;
+  const apiKey = process.env.OLLAMA_API_KEY;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
   const response = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model,
       messages,
