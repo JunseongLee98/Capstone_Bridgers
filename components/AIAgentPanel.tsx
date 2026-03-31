@@ -53,8 +53,7 @@ export default function AIAgentPanel({
       existingEvents,
       startDate,
       endDate,
-      workHours.startHour,
-      workHours.endHour,
+      workHours.segments,
       breakMinutes,
       focusMinutes
     );

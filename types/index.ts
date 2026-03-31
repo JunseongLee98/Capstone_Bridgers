@@ -36,3 +36,16 @@ export interface TaskDurationStats {
   completionCount: number;
 }
 
+// A contiguous block of work hours within a day, expressed in 24h clock hours.
+// Example: { startHour: 6, endHour: 9 } represents 6:00–9:00.
+export interface WorkSegment {
+  startHour: number;
+  endHour: number;
+}
+
+// Configuration for daily work hours. Supports multiple segments per day,
+// e.g. [{ startHour: 6, endHour: 9 }, { startHour: 18, endHour: 21 }].
+export interface WorkHoursConfig {
+  segments: WorkSegment[];
+}
+

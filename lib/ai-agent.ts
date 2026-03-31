@@ -1,4 +1,4 @@
-import { Task, CalendarEvent, TimeSlot, TaskDurationStats } from '@/types';
+import { Task, CalendarEvent, TimeSlot, TaskDurationStats, WorkSegment } from '@/types';
 
 /**
  * AI Agent that learns task durations and distributes tasks across calendar
@@ -146,6 +146,46 @@ export class CalendarAIAgent {
   }
 
   /**
+   * Normalize work segments: clamp to valid ranges, drop invalid segments,
+   * and merge overlapping or touching segments so scheduling never double-books.
+   */
+  private static normalizeWorkSegments(workSegments: WorkSegment[]): WorkSegment[] {
+    const fallback: WorkSegment[] = [{ startHour: 9, endHour: 18 }];
+
+    if (!workSegments || workSegments.length === 0) {
+      return fallback;
+    }
+
+    const segments = workSegments
+      .map((seg) => {
+        const startHour = Math.max(0, Math.min(23, seg.startHour));
+        const endHour = Math.max(0, Math.min(23, seg.endHour));
+        return { startHour, endHour };
+      })
+      .filter((seg) => seg.startHour < seg.endHour)
+      .sort((a, b) => a.startHour - b.startHour);
+
+    if (segments.length === 0) {
+      return fallback;
+    }
+
+    const merged: WorkSegment[] = [];
+    for (const seg of segments) {
+      const last = merged[merged.length - 1];
+      if (!last) {
+        merged.push({ ...seg });
+      } else if (seg.startHour <= last.endHour) {
+        // Overlapping or touching segments → merge into a single block
+        last.endHour = Math.max(last.endHour, seg.endHour);
+      } else {
+        merged.push({ ...seg });
+      }
+    }
+
+    return merged;
+  }
+
+  /**
    * Distribute tasks across available calendar slots
    * breakAfterEventsMinutes: gap after each event/task before next can be scheduled
    * focusMinutes: max chunk size (tasks longer than this get split)
@@ -155,8 +195,7 @@ export class CalendarAIAgent {
     existingEvents: CalendarEvent[],
     startDate: Date,
     endDate: Date,
-    workStartHour: number = 9,
-    workEndHour: number = 18,
+    workSegments: WorkSegment[] = [{ startHour: 9, endHour: 18 }],
     breakAfterEventsMinutes: number = 0,
     focusMinutes: number = 50
   ): CalendarEvent[] {
@@ -185,18 +224,47 @@ export class CalendarAIAgent {
       return a.duration - b.duration;
     });
 
-    // Find all empty slots with custom work hours and break
-    const emptySlots = this.findEmptySlots(
-      existingEvents,
-      startDate,
-      endDate,
-      workStartHour,
-      workEndHour,
-      breakAfterEventsMinutes
-    );
-    
-    // Sort slots by start time
-    emptySlots.sort((a, b) => a.start.getTime() - b.start.getTime());
+    // Build empty slots across all normalized work segments
+    const normalizedSegments = this.normalizeWorkSegments(workSegments);
+
+    let emptySlots: TimeSlot[] = [];
+    for (const segment of normalizedSegments) {
+      const segmentSlots = this.findEmptySlots(
+        existingEvents,
+        startDate,
+        endDate,
+        segment.startHour,
+        segment.endHour,
+        breakAfterEventsMinutes
+      );
+      emptySlots.push(...segmentSlots);
+    }
+
+    // Never schedule in the past: drop / clamp slots that are before "now"
+    const now = new Date();
+    const futureSlots: TimeSlot[] = [];
+
+    for (const slot of emptySlots) {
+      if (slot.end <= now) {
+        continue;
+      }
+
+      const slotStart = slot.start < now ? new Date(now) : slot.start;
+      const duration = Math.round(
+        (slot.end.getTime() - slotStart.getTime()) / (1000 * 60)
+      );
+
+      if (duration >= 15) {
+        futureSlots.push({
+          start: slotStart,
+          end: slot.end,
+          duration,
+        });
+      }
+    }
+
+    // Sort usable slots by start time
+    emptySlots = futureSlots.sort((a, b) => a.start.getTime() - b.start.getTime());
 
     const scheduledEvents: CalendarEvent[] = [];
 
@@ -308,7 +376,20 @@ export class CalendarAIAgent {
       }
     }
 
-    return scheduledEvents;
+    // Final safety: ensure every scheduled event:
+    // - starts in the future, and
+    // - falls within one of the configured work segments for its day.
+    const nowFinal = new Date();
+    const constrainedEvents = scheduledEvents.filter((event) => {
+      if (event.start <= nowFinal) return false;
+
+      const hour = event.start.getHours();
+      return normalizedSegments.some(
+        (seg) => hour >= seg.startHour && hour < seg.endHour
+      );
+    });
+
+    return constrainedEvents;
   }
 
   /**

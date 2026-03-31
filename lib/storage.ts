@@ -1,4 +1,4 @@
-import { Task, CalendarEvent } from '@/types';
+import { Task, CalendarEvent, WorkHoursConfig, WorkSegment } from '@/types';
 
 const TASKS_KEY = 'cadence_tasks';
 const EVENTS_KEY = 'cadence_events';
@@ -112,16 +112,81 @@ export const storage = {
     this.saveICSSubscriptions(subscriptions.filter(sub => sub.id !== id));
   },
 
-  // Work Hours (default 9AM–6PM)
-  getWorkHours(): { startHour: number; endHour: number } {
-    if (typeof window === 'undefined') return { startHour: 9, endHour: 18 };
+  // Work Hours (supports multiple segments per day, default single 9AM–6PM segment)
+  getWorkHours(): WorkHoursConfig {
+    const defaultConfig: WorkHoursConfig = {
+      segments: [{ startHour: 9, endHour: 18 }],
+    };
+
+    if (typeof window === 'undefined') return defaultConfig;
+
     const data = localStorage.getItem(WORK_HOURS_KEY);
-    return data ? JSON.parse(data) : { startHour: 9, endHour: 18 };
+    if (!data) return defaultConfig;
+
+    try {
+      const parsed = JSON.parse(data);
+
+      // New shape: { segments: [...] }
+      if (Array.isArray(parsed?.segments)) {
+        const segments: WorkSegment[] = parsed.segments
+          .map((seg: any) => ({
+            startHour: typeof seg.startHour === 'number' ? seg.startHour : 9,
+            endHour: typeof seg.endHour === 'number' ? seg.endHour : 18,
+          }))
+          .filter((seg: WorkSegment) => seg.startHour < seg.endHour);
+
+        return segments.length > 0 ? { segments } : defaultConfig;
+      }
+
+      // Legacy shape: array of segments directly
+      if (Array.isArray(parsed)) {
+        const segments: WorkSegment[] = parsed
+          .map((seg: any) => ({
+            startHour: typeof seg.startHour === 'number' ? seg.startHour : 9,
+            endHour: typeof seg.endHour === 'number' ? seg.endHour : 18,
+          }))
+          .filter((seg: WorkSegment) => seg.startHour < seg.endHour);
+
+        return segments.length > 0 ? { segments } : defaultConfig;
+      }
+
+      // Legacy shape: single { startHour, endHour }
+      if (typeof parsed.startHour === 'number' && typeof parsed.endHour === 'number') {
+        if (parsed.startHour < parsed.endHour) {
+          return {
+            segments: [
+              {
+                startHour: parsed.startHour,
+                endHour: parsed.endHour,
+              },
+            ],
+          };
+        }
+      }
+    } catch {
+      // Fall back to default on parse errors
+    }
+
+    return defaultConfig;
   },
 
-  saveWorkHours(workHours: { startHour: number; endHour: number }): void {
+  saveWorkHours(workHours: WorkHoursConfig): void {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(WORK_HOURS_KEY, JSON.stringify(workHours));
+
+    const segments: WorkSegment[] = (workHours?.segments || [])
+      .map((seg) => ({
+        // Clamp to valid 24h clock range
+        startHour: Math.max(0, Math.min(23, seg.startHour)),
+        endHour: Math.max(0, Math.min(23, seg.endHour)),
+      }))
+      .filter((seg) => seg.startHour < seg.endHour);
+
+    const configToSave: WorkHoursConfig =
+      segments.length > 0
+        ? { segments }
+        : { segments: [{ startHour: 9, endHour: 18 }] };
+
+    localStorage.setItem(WORK_HOURS_KEY, JSON.stringify(configToSave));
   },
 
   // Break after events (minutes) - gap before next task can be scheduled

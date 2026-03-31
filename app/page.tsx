@@ -44,10 +44,14 @@ export default function Home() {
   const [showEventDialog, setShowEventDialog] = useState(false);
   const [isDecomposingEvent, setIsDecomposingEvent] = useState(false);
   const [conversionDuration, setConversionDuration] = useState(60); // Default duration in minutes
-  const [workHours, setWorkHours] = useState({ startHour: 9, endHour: 18 });
+  const [workHours, setWorkHours] = useState<{ segments: { startHour: number; endHour: number }[] }>({
+    segments: [{ startHour: 9, endHour: 18 }],
+  });
   const [showWorkHoursDialog, setShowWorkHoursDialog] = useState(false);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
-  const [tempWorkHours, setTempWorkHours] = useState({ startHour: 9, endHour: 18 });
+  const [tempWorkHours, setTempWorkHours] = useState<{ segments: { startHour: number; endHour: number }[] }>({
+    segments: [{ startHour: 9, endHour: 18 }],
+  });
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [breakAfterEvents, setBreakAfterEvents] = useState(5);
   const [tempBreakAfterEvents, setTempBreakAfterEvents] = useState(5);
@@ -554,7 +558,7 @@ export default function Home() {
       
       // Get current work hours
       const currentWorkHours = storage.getWorkHours();
-      
+
       // Schedule just this new task with custom work hours
       const breakMinutes = storage.getBreakAfterEvents();
       const focusMinutes = storage.getFocusMinutes();
@@ -563,8 +567,7 @@ export default function Home() {
         allExistingEvents,
         startDate,
         endDate,
-        currentWorkHours.startHour,
-        currentWorkHours.endHour,
+        currentWorkHours.segments,
         breakMinutes,
         focusMinutes
       );
@@ -606,7 +609,7 @@ export default function Home() {
 
       // Get current work hours
       const currentWorkHours = storage.getWorkHours();
-      
+
       const breakMinutes = storage.getBreakAfterEvents();
       const focusMinutes = storage.getFocusMinutes();
       const scheduledEvents = CalendarAIAgent.distributeTasks(
@@ -614,8 +617,7 @@ export default function Home() {
         allExistingEvents,
         startDate,
         endDate,
-        currentWorkHours.startHour,
-        currentWorkHours.endHour,
+        currentWorkHours.segments,
         breakMinutes,
         focusMinutes
       );
@@ -688,6 +690,17 @@ export default function Home() {
     setConversionDuration(durationMinutes > 0 && durationMinutes < 1440 ? durationMinutes : 60);
     setShowEventDialog(true);
   };
+
+  const isValidWorkHours = (config: { segments: { startHour: number; endHour: number }[] }) => {
+    if (!config || !Array.isArray(config.segments) || config.segments.length === 0) {
+      return false;
+    }
+    return config.segments.every(
+      (segment) => typeof segment.startHour === 'number' && typeof segment.endHour === 'number' && segment.startHour < segment.endHour
+    );
+  };
+
+  const isTempWorkHoursValid = isValidWorkHours(tempWorkHours);
 
   // Convert event to task
   const handleConvertEventToTask = async (event: CalendarEvent) => {
@@ -792,8 +805,7 @@ export default function Home() {
         allExistingEvents,
         startDate,
         endDate,
-        workHours.startHour,
-        workHours.endHour,
+        workHours.segments,
         breakMinutes,
         focusMinutes
       );
@@ -1692,59 +1704,114 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Set Work Hours</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Tasks will only be created and scheduled during these hours (Monday–Friday). The system uses this window to find available slots for your work.
+              Tasks will only be created and scheduled during these hours (Monday–Friday). You can define multiple work
+              blocks per day (for example 6–9 AM and 6–9 PM).
             </p>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Start Hour
-                </label>
-                <select
-                  value={tempWorkHours.startHour}
-                  onChange={(e) => setTempWorkHours({ ...tempWorkHours, startHour: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
-                    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-                    const ampm = hour < 12 ? 'AM' : 'PM';
-                    return (
-                      <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  End Hour
-                </label>
-                <select
-                  value={tempWorkHours.endHour}
-                  onChange={(e) => setTempWorkHours({ ...tempWorkHours, endHour: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
-                    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-                    const ampm = hour < 12 ? 'AM' : 'PM';
-                    return (
-                      <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>
-                    );
-                  })}
-                </select>
-              </div>
-              {tempWorkHours.startHour >= tempWorkHours.endHour && (
-                <p className="text-sm text-red-600">End hour must be after start hour</p>
+              {tempWorkHours.segments.map((segment, index) => (
+                <div key={index} className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Hour
+                    </label>
+                    <select
+                      value={segment.startHour}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        setTempWorkHours({
+                          segments: tempWorkHours.segments.map((s, i) =>
+                            i === index ? { ...s, startHour: value } : s
+                          ),
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                        const ampm = hour < 12 ? 'AM' : 'PM';
+                        return (
+                          <option key={hour} value={hour}>
+                            {displayHour}:00 {ampm}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Hour
+                    </label>
+                    <select
+                      value={segment.endHour}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        setTempWorkHours({
+                          segments: tempWorkHours.segments.map((s, i) =>
+                            i === index ? { ...s, endHour: value } : s
+                          ),
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                        const ampm = hour < 12 ? 'AM' : 'PM';
+                        return (
+                          <option key={hour} value={hour}>
+                            {displayHour}:00 {ampm}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  {tempWorkHours.segments.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempWorkHours({
+                          segments: tempWorkHours.segments.filter((_, i) => i !== index),
+                        });
+                      }}
+                      className="px-3 py-2 text-sm text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const fallbackSegment = { startHour: 9, endHour: 18 };
+                  setTempWorkHours({
+                    segments: [
+                      ...tempWorkHours.segments,
+                      fallbackSegment,
+                    ],
+                  });
+                }}
+                className="text-sm text-primary-600 hover:text-primary-700"
+              >
+                + Add work segment
+              </button>
+
+              {!isTempWorkHoursValid && (
+                <p className="text-sm text-red-600">
+                  Each segment must have an end hour after its start hour, and at least one segment is required.
+                </p>
               )}
             </div>
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => {
-                  if (tempWorkHours.startHour < tempWorkHours.endHour) {
+                  if (isTempWorkHoursValid) {
                     setWorkHours(tempWorkHours);
                     storage.saveWorkHours(tempWorkHours);
                     setShowWorkHoursDialog(false);
                   }
                 }}
-                disabled={tempWorkHours.startHour >= tempWorkHours.endHour}
+                disabled={!isTempWorkHoursValid}
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Save
@@ -1777,39 +1844,97 @@ export default function Home() {
                   <Clock size={16} />
                   Working Hours
                 </h4>
-                <p className="text-xs text-gray-500 mb-2">Tasks are only scheduled during these hours (Mon–Fri)</p>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
-                    <select
-                      value={tempWorkHours.startHour}
-                      onChange={(e) => setTempWorkHours({ ...tempWorkHours, startHour: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    >
-                      {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
-                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-                        const ampm = hour < 12 ? 'AM' : 'PM';
-                        return <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>;
-                      })}
-                    </select>
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">End</label>
-                    <select
-                      value={tempWorkHours.endHour}
-                      onChange={(e) => setTempWorkHours({ ...tempWorkHours, endHour: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    >
-                      {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
-                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-                        const ampm = hour < 12 ? 'AM' : 'PM';
-                        return <option key={hour} value={hour}>{displayHour}:00 {ampm}</option>;
-                      })}
-                    </select>
-                  </div>
+                <p className="text-xs text-gray-500 mb-2">
+                  Tasks are only scheduled during these hours (Mon–Fri). Define one or more work blocks per day.
+                </p>
+                <div className="space-y-3">
+                  {tempWorkHours.segments.map((segment, index) => (
+                    <div key={index} className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
+                        <select
+                          value={segment.startHour}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value);
+                            setTempWorkHours({
+                              segments: tempWorkHours.segments.map((s, i) =>
+                                i === index ? { ...s, startHour: value } : s
+                              ),
+                            });
+                          }}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        >
+                          {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                            const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                            const ampm = hour < 12 ? 'AM' : 'PM';
+                            return (
+                              <option key={hour} value={hour}>
+                                {displayHour}:00 {ampm}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">End</label>
+                        <select
+                          value={segment.endHour}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value);
+                            setTempWorkHours({
+                              segments: tempWorkHours.segments.map((s, i) =>
+                                i === index ? { ...s, endHour: value } : s
+                              ),
+                            });
+                          }}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        >
+                          {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                            const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                            const ampm = hour < 12 ? 'AM' : 'PM';
+                            return (
+                              <option key={hour} value={hour}>
+                                {displayHour}:00 {ampm}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      {tempWorkHours.segments.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempWorkHours({
+                              segments: tempWorkHours.segments.filter((_, i) => i !== index),
+                            });
+                          }}
+                          className="px-2 py-1 text-xs text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fallbackSegment = { startHour: 9, endHour: 18 };
+                      setTempWorkHours({
+                        segments: [
+                          ...tempWorkHours.segments,
+                          fallbackSegment,
+                        ],
+                      });
+                    }}
+                    className="text-xs text-primary-600 hover:text-primary-700"
+                  >
+                    + Add work segment
+                  </button>
                 </div>
-                {tempWorkHours.startHour >= tempWorkHours.endHour && (
-                  <p className="text-xs text-red-600 mt-1">End hour must be after start hour</p>
+                {!isTempWorkHoursValid && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Each segment must have an end hour after its start hour, and at least one segment is required.
+                  </p>
                 )}
               </div>
 
@@ -1851,8 +1976,7 @@ export default function Home() {
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
               <button
                 onClick={() => {
-                  const valid = tempWorkHours.startHour < tempWorkHours.endHour;
-                  if (valid) {
+                  if (isTempWorkHoursValid) {
                     setWorkHours(tempWorkHours);
                     storage.saveWorkHours(tempWorkHours);
                   }
@@ -1862,7 +1986,7 @@ export default function Home() {
                   storage.saveFocusMinutes(tempFocusMinutes);
                   setShowSettingsDialog(false);
                 }}
-                disabled={tempWorkHours.startHour >= tempWorkHours.endHour}
+                disabled={!isTempWorkHoursValid}
                 className="flex-1 px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
               >
                 Save
