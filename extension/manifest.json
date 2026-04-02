@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Cadence (backend)",
+  "version": "0.1.0",
+  "description": "Cadence scheduling & AI logic for use with the Cadence web app or Google Calendar. Load unpacked after npm run build:extension.",
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://api.openai.com/*",
+    "http://localhost:11434/*",
+    "https://*/*"
+  ]
+}

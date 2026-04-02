@@ -18,6 +18,8 @@ export interface OllamaChatOptions {
   model?: string;
   temperature?: number;
   stream?: boolean;
+  /** Overrides process.env.OLLAMA_API_KEY (e.g. Chrome extension storage). */
+  apiKey?: string;
 }
 
 /**
@@ -34,7 +36,7 @@ export async function ollamaChat(
   if (baseUrl.endsWith('/api')) baseUrl = baseUrl.slice(0, -4);
   const model = options.model ?? process.env.OLLAMA_MODEL ?? DEFAULT_MODEL;
   const stream = options.stream ?? false;
-  const apiKey = process.env.OLLAMA_API_KEY;
+  const apiKey = options.apiKey ?? process.env.OLLAMA_API_KEY;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
