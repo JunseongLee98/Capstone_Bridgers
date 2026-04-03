@@ -1,10 +1,15 @@
-# Cadence Chrome extension (backend)
+# Cadence Chrome extension
 
-This folder contains a **Manifest V3** extension that runs the same backend responsibilities as the Next.js API routes:
+Run Cadence **on [Google Calendar](https://calendar.google.com)** without opening the separate Cadence web app.
 
-- **Assignment decomposition** — Ollama (local) or OpenAI, via `lib/decompose-assignment.ts`
-- **Google Calendar events** — REST fetch to `calendar/v3`, via `lib/google-calendar-rest.ts`
-- **ICS fetch** — HTTPS fetch (no CORS proxy), replaces `/api/ics/proxy`
+## What you get
+
+- **Side panel** (iframe) injected on `calendar.google.com` — toggle with the **Cadence** floating button.
+- **Tasks**, **multi-segment work hours**, **break / focus** settings — stored in `chrome.storage.local` (same keys as the web app where possible).
+- **Connect Google** — OAuth in the extension (`chrome.identity.launchWebAuthFlow`). Uses your **OAuth Client ID** from the options page. Add the shown **redirect URI** in Google Cloud Console.
+- **Distribute** — schedules tasks with `CalendarAIAgent` using Google busy times + ICS feeds + existing Cadence blocks.
+- **AI breakdown** — `CADENCE_DECOMPOSE` in the service worker (Ollama / OpenAI keys from options).
+- **ICS HTTPS** feeds — fetched in the background (no Next.js proxy).
 
 ## Build
 
@@ -15,58 +20,33 @@ npm install
 npm run build:extension
 ```
 
-This bundles `extension/src/background.ts` (and shared `lib/*` code) into `extension/dist/background.js`.
+Outputs:
+
+- `extension/dist/background.js` — service worker  
+- `extension/dist/content.js` — injects panel + toggle  
+- `extension/dist/panel.js` + `panel.css` — React UI  
+- `extension/dist/options.js` + `options.css` — settings page  
 
 ## Load in Chrome
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. **Load unpacked** → select the `extension/` directory (the folder that contains `manifest.json` and `dist/` after build)
+1. `chrome://extensions` → **Developer mode** → **Load unpacked** → select the **`extension/`** folder (contains `manifest.json` and `dist/` after build).
 
-## Configure LLM keys (extension)
+2. Open **https://calendar.google.com** — click **Cadence** (bottom-right) to show/hide the panel.
 
-The service worker reads optional keys from **`chrome.storage.local`**:
+3. **Extension options** (right-click the extension icon → **Options**, or the **Options** button in the panel):
 
-| Key | Purpose |
-|-----|---------|
-| `cadence_openai_api_key` | OpenAI API key (if set, OpenAI is used for decompose) |
-| `cadence_ollama_base_url` | e.g. `http://localhost:11434` |
-| `cadence_ollama_model` | e.g. `llama3.2` |
-| `cadence_ollama_api_key` | Optional Ollama cloud API key |
+   - Copy the **Authorized redirect URI** into your [Google Cloud OAuth client](https://console.cloud.google.com/apis/credentials) (Web or Desktop client).
+   - Paste **OAuth Client ID**, optional **OpenAI** key, **Ollama** URL/model.
+   - **Save**.
 
-You can set these from the extension **service worker console** for testing:
+4. In the panel, **Connect Google** and sign in. Then add tasks, ICS URLs, and **Distribute**.
 
-```js
-chrome.storage.local.set({
-  cadence_ollama_base_url: 'http://localhost:11434',
-  cadence_ollama_model: 'llama3.2'
-});
-```
+## Shared code
 
-Or add a small options page later.
+- `lib/cadence-messages.ts` — message types for UI ↔ background.  
+- `lib/cadence-request.ts` — `cadenceRequest()` helper (extension pages only).  
+- `lib/decompose-assignment.ts`, `lib/google-calendar-rest.ts`, `lib/ai-agent.ts` — used by the service worker and/or panel bundle.
 
-## Messaging API
+## Note on scheduled blocks
 
-Send messages from a web page **only if** it is allowed (e.g. extension page) or use **externally_connectable** / **content script** bridge. Typical pattern: the Cadence app’s content script or side panel calls:
-
-```ts
-chrome.runtime.sendMessage(extensionId, {
-  type: 'CADENCE_DECOMPOSE',
-  payload: { title: 'Essay', description: '...', dueDate: '2026-04-01T00:00:00.000Z' }
-}, (response) => { ... });
-```
-
-Message types:
-
-| `type` | `payload` | Returns |
-|--------|-----------|---------|
-| `CADENCE_DECOMPOSE` | `{ title, description?, dueDate? }` | `{ subtasks: [...] }` |
-| `CADENCE_GET_GOOGLE_EVENTS` | `{ accessToken, timeMin?, timeMax? }` (ISO strings) | `{ events: CalendarEvent[] }` |
-| `CADENCE_FETCH_ICS` | `{ url }` (HTTPS only) | `{ body: string }` |
-| `CADENCE_GET_ENV` | — | Current stored LLM settings (no secrets redacted — keep dev only) |
-
-Response shape: `{ ok: true, data }` or `{ ok: false, error: string }`.
-
-## Branch
-
-Implemented on branch `chrome_extension` alongside shared modules under `lib/`.
+Scheduled **Cadence** blocks are listed in the panel and stored locally. They are **not** automatically inserted as native Google Calendar events yet (that can be added via Calendar API `events.insert` in a follow-up).

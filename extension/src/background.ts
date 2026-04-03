@@ -1,37 +1,23 @@
 /**
- * Cadence extension service worker — hosts former Next.js API logic:
- * assignment decomposition (Ollama/OpenAI), Google Calendar events (REST), ICS fetch.
- *
- * UI (web app or side panel) calls via chrome.runtime.sendMessage.
+ * Cadence extension service worker — API routes + Google OAuth for the panel on Calendar.
  */
 import { decomposeAssignment, type DecomposeEnv } from '../../lib/decompose-assignment';
 import { fetchGoogleCalendarEventsRest } from '../../lib/google-calendar-rest';
+import type { CadenceMessage } from '../../lib/cadence-messages';
 
-export type CadenceMessage =
-  | {
-      type: 'CADENCE_DECOMPOSE';
-      payload: { title: string; description?: string; dueDate?: string };
-    }
-  | {
-      type: 'CADENCE_GET_GOOGLE_EVENTS';
-      payload: { accessToken: string; timeMin?: string; timeMax?: string };
-    }
-  | {
-      type: 'CADENCE_FETCH_ICS';
-      payload: { url: string };
-    }
-  | {
-      type: 'CADENCE_GET_ENV';
-      payload?: Record<string, never>;
-    };
-
-/** Keys mirrored in options UI / chrome.storage.local */
+/** LLM keys in chrome.storage.local */
 const STORAGE = {
   openaiApiKey: 'cadence_openai_api_key',
   ollamaBaseUrl: 'cadence_ollama_base_url',
   ollamaModel: 'cadence_ollama_model',
   ollamaApiKey: 'cadence_ollama_api_key',
+  googleOAuthClientId: 'cadence_google_oauth_client_id',
 } as const;
+
+const CALENDAR_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+].join(' ');
 
 async function loadDecomposeEnv(): Promise<DecomposeEnv> {
   const data = await chrome.storage.local.get([
@@ -46,6 +32,57 @@ async function loadDecomposeEnv(): Promise<DecomposeEnv> {
     ollamaModel: data[STORAGE.ollamaModel] as string | undefined,
     ollamaApiKey: data[STORAGE.ollamaApiKey] as string | undefined,
   };
+}
+
+function extensionRedirectUri(): string {
+  return `https://${chrome.runtime.id}.chromiumapp.org`;
+}
+
+async function oauthGoogleImplicit(clientId: string): Promise<{ access_token: string; expires_in?: string }> {
+  const redirectUri = extensionRedirectUri();
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'token',
+    redirect_uri: redirectUri,
+    scope: CALENDAR_SCOPES,
+    include_granted_scopes: 'true',
+    prompt: 'consent',
+  });
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+  return new Promise((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (responseUrl) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (!responseUrl) {
+        reject(new Error('No redirect URL'));
+        return;
+      }
+      try {
+        const url = new URL(responseUrl);
+        const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+        const parsed = new URLSearchParams(hash);
+        const access_token = parsed.get('access_token');
+        const error = parsed.get('error');
+        if (error) {
+          reject(new Error(parsed.get('error_description') || error));
+          return;
+        }
+        if (!access_token) {
+          reject(new Error('No access_token in redirect. Add this redirect URI in Google Cloud: ' + redirectUri));
+          return;
+        }
+        resolve({
+          access_token,
+          expires_in: parsed.get('expires_in') || undefined,
+        });
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
+    });
+  });
 }
 
 async function handleMessage(msg: CadenceMessage): Promise<unknown> {
@@ -87,6 +124,18 @@ async function handleMessage(msg: CadenceMessage): Promise<unknown> {
       }
       const text = await res.text();
       return { body: text };
+    }
+    case 'CADENCE_OAUTH_GOOGLE': {
+      const { clientId } = msg.payload;
+      if (!clientId?.trim()) {
+        throw new Error('OAuth Client ID is required. Set it in Cadence extension options.');
+      }
+      await chrome.storage.local.set({ [STORAGE.googleOAuthClientId]: clientId.trim() });
+      const tokens = await oauthGoogleImplicit(clientId.trim());
+      await chrome.storage.local.set({
+        cadence_google_tokens: JSON.stringify({ access_token: tokens.access_token }),
+      });
+      return { ok: true };
     }
     default:
       throw new Error(`Unknown message type: ${(msg as { type?: string }).type ?? 'undefined'}`);

@@ -1,0 +1,61 @@
+.options-body {
+  font-family: system-ui, -apple-system, sans-serif;
+  padding: 24px;
+  max-width: 640px;
+  margin: 0 auto;
+  color: #0f172a;
+}
+h1 {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+.hint {
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.code {
+  background: #f1f5f9;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+.field {
+  display: block;
+  margin-top: 16px;
+}
+.field span {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.field input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.btn {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover {
+  filter: brightness(1.05);
+}
+.status {
+  margin-top: 12px;
+  color: #16a34a;
+  font-size: 0.9rem;
+}
