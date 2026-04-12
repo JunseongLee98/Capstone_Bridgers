@@ -9,6 +9,8 @@ export interface Task {
   dueDate?: Date;
   createdAt: Date;
   completedAt?: Date;
+  /** From AI breakdown `order`: lower = earlier step; used to schedule steps in sequence. */
+  planStepOrder?: number;
 }
 
 export interface CalendarEvent {

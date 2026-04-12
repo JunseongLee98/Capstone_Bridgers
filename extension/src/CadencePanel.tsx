@@ -307,13 +307,15 @@ export function CadencePanel(): React.ReactElement {
         type: 'CADENCE_DECOMPOSE',
         payload: { title: aiTitle.trim(), description: aiDesc || undefined },
       });
-      const newTasks: Task[] = subtasks.map((st) => ({
+      const ordered = [...subtasks].sort((a, b) => a.order - b.order);
+      const newTasks: Task[] = ordered.map((st) => ({
         id: uuidv4(),
         title: st.title,
         description: st.description,
         estimatedDuration: st.estimatedMinutes ?? 60,
         priority: 'medium' as const,
         category: '',
+        planStepOrder: st.order,
         createdAt: new Date(),
         actualDurations: [],
       }));

@@ -5,3 +5,18 @@ export function formatDateToLocalISO(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Parse `YYYY-MM-DD` as local midnight (avoids UTC-only parsing from `new Date(iso)`). */
+export function parseLocalDateInput(isoDate: string): Date {
+  const parts = isoDate.split('-').map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) return new Date(NaN);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+/** Last instant of the task due calendar day in local time (23:59:59.999). */
+export function endOfLocalCalendarDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
