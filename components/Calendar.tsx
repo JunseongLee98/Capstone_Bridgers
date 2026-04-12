@@ -131,7 +131,7 @@ export default function Calendar({ events, onSelectSlot, onSelectEvent }: Calend
           max={new Date(1970, 0, 1, 23, 59, 0)}
           scrollToTime={scrollTargetTime}
           components={{
-            timeSlotWrapper: TimeSlotWrapper,
+            timeSlotWrapper: TimeSlotWrapper as React.ComponentType<any>,
           }}
         />
       </div>
