@@ -10,12 +10,20 @@ export class CalendarAIAgent {
    * Calculate average duration for a task based on historical data
    */
   static calculateTaskDuration(task: Task): number {
-    if (task.actualDurations.length === 0) {
-      // If no historical data, use estimate or default
-      return task.estimatedDuration || 60; // default 1 hour
+    // For work not done yet, always plan from the user's estimate when they set one.
+    // Otherwise a short first completion (e.g. 30m) would shrink all future schedules.
+    if (
+      !task.completedAt &&
+      task.estimatedDuration != null &&
+      task.estimatedDuration > 0
+    ) {
+      return task.estimatedDuration;
     }
 
-    // Calculate average from actual durations
+    if (task.actualDurations.length === 0) {
+      return task.estimatedDuration && task.estimatedDuration > 0 ? task.estimatedDuration : 60;
+    }
+
     const sum = task.actualDurations.reduce((acc, duration) => acc + duration, 0);
     return Math.round(sum / task.actualDurations.length);
   }
@@ -386,21 +394,15 @@ export class CalendarAIAgent {
       }
 
       const dueEnd = this.getTaskDueDeadline(task);
-      let minStartMs = Math.max(
-        now.getTime(),
-        perTaskNextStart.get(task.id)?.getTime() ?? 0
-      );
-      if (usesPlanOrder) {
-        minStartMs = Math.max(minStartMs, globalCursor.getTime());
-      }
-      const minStart = new Date(minStartMs);
 
       const displayTitle =
         totalParts > 1 ? `${task.title} (Part ${partIndex + 1}/${totalParts})` : task.title;
 
+      let placementFrag = 0;
       const applyPlacement = (eventStart: Date, eventEnd: Date, slotIndex: number, slot: TimeSlot) => {
+        placementFrag += 1;
         scheduledEvents.push({
-          id: nextScheduleEventId(task.id, `s${slotIndex}-p${partIndex}`),
+          id: nextScheduleEventId(task.id, `s${slotIndex}-p${partIndex}-f${placementFrag}`),
           title: displayTitle,
           start: eventStart,
           end: eventEnd,
@@ -434,66 +436,83 @@ export class CalendarAIAgent {
         }
       };
 
-      let scheduled = false;
+      // Keep placing until this focus-chunk's minutes are exhausted. Previously we placed
+      // min(chunk, slot) once then moved on, which dropped the remainder and under-scheduled.
+      let remainingChunk = duration;
+      let chunkHadPlacement = false;
 
-      for (let i = 0; i < emptySlots.length; i++) {
-        const slot = emptySlots[i];
-        const effStart = new Date(Math.max(slot.start.getTime(), minStart.getTime()));
-        const slotEndCap =
-          dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
-        if (effStart.getTime() >= slotEndCap.getTime()) {
-          continue;
-        }
-
-        const slotAvail = Math.round(
-          (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
+      while (remainingChunk >= 15) {
+        const minStartFresh = new Date(
+          Math.max(
+            now.getTime(),
+            perTaskNextStart.get(task.id)?.getTime() ?? 0,
+            usesPlanOrder ? globalCursor.getTime() : 0
+          )
         );
-        if (slotAvail < 15) {
-          continue;
-        }
 
-        const useMinutes = Math.min(duration, slotAvail);
-        if (useMinutes < 15) {
-          continue;
-        }
-
-        const eventStart = new Date(effStart);
-        const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
-        applyPlacement(eventStart, eventEnd, i, slot);
-        scheduled = true;
-        break;
-      }
-
-      let splitEvents: { events: CalendarEvent[]; lastEnd: Date | null } = {
-        events: [],
-        lastEnd: null,
-      };
-      if (!scheduled && duration > 0) {
-        splitEvents = this.splitTaskAcrossSlots(
-          task,
-          displayTitle,
-          duration,
-          emptySlots,
-          breakAfterEventsMinutes,
-          dueEnd,
-          minStart,
-          partIndex,
-          this.taskColor(task),
-          nextScheduleEventId
-        );
-        scheduledEvents.push(...splitEvents.events);
-        if (splitEvents.lastEnd) {
-          const after = new Date(
-            splitEvents.lastEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
-          );
-          perTaskNextStart.set(task.id, after);
-          if (usesPlanOrder) {
-            globalCursor = new Date(Math.max(globalCursor.getTime(), after.getTime()));
+        let placedThisRound = false;
+        for (let i = 0; i < emptySlots.length; i++) {
+          const slot = emptySlots[i];
+          const effStart = new Date(Math.max(slot.start.getTime(), minStartFresh.getTime()));
+          const slotEndCap =
+            dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
+          if (effStart.getTime() >= slotEndCap.getTime()) {
+            continue;
           }
+
+          const slotAvail = Math.round(
+            (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
+          );
+          if (slotAvail < 15) {
+            continue;
+          }
+
+          const useMinutes = Math.min(remainingChunk, slotAvail);
+          if (useMinutes < 15) {
+            continue;
+          }
+
+          const eventStart = new Date(effStart);
+          const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
+          applyPlacement(eventStart, eventEnd, i, slot);
+          remainingChunk -= useMinutes;
+          placedThisRound = true;
+          chunkHadPlacement = true;
+          break;
+        }
+
+        if (!placedThisRound) {
+          const splitResult = this.splitTaskAcrossSlots(
+            task,
+            displayTitle,
+            remainingChunk,
+            emptySlots,
+            breakAfterEventsMinutes,
+            dueEnd,
+            minStartFresh,
+            partIndex,
+            this.taskColor(task),
+            nextScheduleEventId
+          );
+          scheduledEvents.push(...splitResult.events);
+          if (splitResult.lastEnd) {
+            const after = new Date(
+              splitResult.lastEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
+            );
+            perTaskNextStart.set(task.id, after);
+            if (usesPlanOrder) {
+              globalCursor = new Date(Math.max(globalCursor.getTime(), after.getTime()));
+            }
+          }
+          if (splitResult.events.length > 0) {
+            chunkHadPlacement = true;
+          }
+          remainingChunk = splitResult.remainingMinutes;
+          break;
         }
       }
 
-      const placed = scheduled || splitEvents.events.length > 0;
+      const placed = chunkHadPlacement;
       if (usesPlanOrder && placed) {
         prevPlanTaskScheduledSomething = true;
       }
@@ -556,7 +575,7 @@ export class CalendarAIAgent {
     partIndex: number,
     color: string,
     nextScheduleEventId: (taskId: string, tag: string) => string
-  ): { events: CalendarEvent[]; lastEnd: Date | null } {
+  ): { events: CalendarEvent[]; lastEnd: Date | null; remainingMinutes: number } {
     const events: CalendarEvent[] = [];
     let remainingDuration = duration;
     let subPart = 1;
@@ -626,7 +645,7 @@ export class CalendarAIAgent {
       }
     }
 
-    return { events, lastEnd };
+    return { events, lastEnd, remainingMinutes: remainingDuration };
   }
 
   /**
