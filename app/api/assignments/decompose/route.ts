@@ -23,12 +23,9 @@ import { ollamaChat } from '@/lib/ollama';
  *   }>
  * }
  */
-function getProvider(): 'ollama' | 'openai' {
-  // Prefer OpenAI only when explicitly configured
-  if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== '') {
-    return 'openai';
-  }
-  // Otherwise use Ollama (default http://localhost:11434 or OLLAMA_BASE_URL)
+function getProvider(): 'ollama' | 'openai' | 'groq' {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== '') return 'groq';
+  if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== '') return 'openai';
   return 'ollama';
 }
 
@@ -82,7 +79,36 @@ Return ONLY valid JSON with this shape (no markdown, no code fence):
   try {
     let content: string;
 
-    if (provider === 'ollama') {
+    if (provider === 'groq') {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: 'You are a helpful study planner that returns strict JSON.' },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.3,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('Groq API error:', response.status, errorText);
+        return NextResponse.json({ error: 'Failed to call language model.' }, { status: 502 });
+      }
+
+      const data = await response.json();
+      const msg = data.choices?.[0]?.message?.content;
+      if (!msg || typeof msg !== 'string') {
+        return NextResponse.json({ error: 'Unexpected model response format.' }, { status: 500 });
+      }
+      content = msg;
+    } else if (provider === 'ollama') {
       const baseUrl =
         process.env.OLLAMA_BASE_URL && process.env.OLLAMA_BASE_URL !== ''
           ? process.env.OLLAMA_BASE_URL
