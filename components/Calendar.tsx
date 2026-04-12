@@ -90,7 +90,9 @@ export default function Calendar({ events, onSelectSlot, onSelectEvent }: Calend
   }, [events]);
 
   const eventStyleGetter = (event: CalendarEvent) => {
+    const isTaskBlock = Boolean(event.taskId);
     return {
+      className: isTaskBlock ? 'rbc-event--cadence-task' : undefined,
       style: {
         backgroundColor: event.color || '#3174ad',
         borderRadius: '4px',
@@ -99,6 +101,8 @@ export default function Calendar({ events, onSelectSlot, onSelectEvent }: Calend
         border: '1px solid rgba(15, 23, 42, 0.12)',
         fontWeight: 500,
         display: 'block',
+        // Sit above subscribed / Google layers when overlap layout stacks events.
+        zIndex: isTaskBlock ? 5 : 1,
       },
     };
   };

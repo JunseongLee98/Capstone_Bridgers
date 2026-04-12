@@ -35,6 +35,12 @@ body {
   padding: 2px 5px;
 }
 
+/* Scheduled task blocks: stay readable above external calendars in overlap columns */
+.rbc-event.rbc-event--cadence-task {
+  z-index: 5;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2);
+}
+
 .rbc-today {
   background-color: #f0f9ff;
 }

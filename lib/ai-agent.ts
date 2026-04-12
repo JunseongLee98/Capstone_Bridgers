@@ -319,6 +319,10 @@ export class CalendarAIAgent {
     emptySlots = futureSlots.sort((a, b) => a.start.getTime() - b.start.getTime());
 
     const scheduledEvents: CalendarEvent[] = [];
+    let scheduleIdSeq = 0;
+    const nextScheduleEventId = (taskId: string, tag: string) =>
+      `scheduled-${taskId}-${++scheduleIdSeq}-${tag}`;
+
     let globalCursor = new Date(now);
     const perTaskNextStart = new Map<string, Date>();
 
@@ -359,7 +363,7 @@ export class CalendarAIAgent {
 
       const applyPlacement = (eventStart: Date, eventEnd: Date, slotIndex: number, slot: TimeSlot) => {
         scheduledEvents.push({
-          id: `scheduled-${task.id}-${Date.now()}-${slotIndex}-p${partIndex}`,
+          id: nextScheduleEventId(task.id, `s${slotIndex}-p${partIndex}`),
           title: displayTitle,
           start: eventStart,
           end: eventEnd,
@@ -437,7 +441,8 @@ export class CalendarAIAgent {
           dueEnd,
           minStart,
           partIndex,
-          this.taskColor(task)
+          this.taskColor(task),
+          nextScheduleEventId
         );
         scheduledEvents.push(...splitEvents.events);
         if (splitEvents.lastEnd) {
@@ -512,7 +517,8 @@ export class CalendarAIAgent {
     dueEnd: Date | null,
     minStart: Date,
     partIndex: number,
-    color: string
+    color: string,
+    nextScheduleEventId: (taskId: string, tag: string) => string
   ): { events: CalendarEvent[]; lastEnd: Date | null } {
     const events: CalendarEvent[] = [];
     let remainingDuration = duration;
@@ -548,7 +554,7 @@ export class CalendarAIAgent {
       const eventEnd = new Date(eventStart.getTime() + durationToUse * 60 * 1000);
 
       events.push({
-        id: `scheduled-${task.id}-${Date.now()}-${i}-part${partIndex}-${subPart}`,
+        id: nextScheduleEventId(task.id, `s${i}-p${partIndex}-sp${subPart}`),
         title: displayTitle,
         start: eventStart,
         end: eventEnd,

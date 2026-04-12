@@ -469,10 +469,11 @@ export default function Home() {
     storage.saveEvents(events);
   }, [events]);
 
-  // Merge all events for display
+  // Merge all events for display. Cadence (local) events must come **last** so react-big-calendar
+  // paints them above Google/ICS when times overlap; otherwise task blocks sit underneath and look missing.
   const allEvents = useMemo(() => {
     const localEvents = events.filter(e => !e.id.startsWith('google-') && !e.id.startsWith('ics-sub-'));
-    return [...localEvents, ...googleEvents, ...icsSubscribedEvents];
+    return [...googleEvents, ...icsSubscribedEvents, ...localEvents];
   }, [events, googleEvents, icsSubscribedEvents]);
 
   // Close dropdowns when clicking outside
