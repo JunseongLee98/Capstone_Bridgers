@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Cadence",
+  "version": "0.2.0",
+  "description": "Cadence tasks, work hours, AI breakdown, and scheduling on Google Calendar (no separate web app tab).",
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "permissions": ["storage", "identity"],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://accounts.google.com/*",
+    "https://api.openai.com/*",
+    "http://localhost:11434/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "Cadence — use on calendar.google.com"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://calendar.google.com/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel.html", "dist/panel.js", "dist/panel.css"],
+      "matches": ["https://calendar.google.com/*"]
+    }
+  ]
+}

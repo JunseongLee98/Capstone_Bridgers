@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Task, CalendarEvent } from '@/types';
 import { storage } from '@/lib/storage';
 import { CalendarAIAgent } from '@/lib/ai-agent';
-import { formatDateToLocalISO } from '@/lib/date-utils';
+import { formatDateToLocalISO, parseLocalDateInput } from '@/lib/date-utils';
 import Calendar from '@/components/Calendar';
 import { v4 as uuidv4 } from 'uuid';
 import Image from 'next/image';
@@ -513,7 +513,7 @@ export default function Home() {
       estimatedDuration: taskData.estimatedDuration,
       priority: taskData.priority,
       category: taskData.category,
-      dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
+      dueDate: taskData.dueDate ? parseLocalDateInput(taskData.dueDate) : undefined,
       id: uuidv4(),
       createdAt: new Date(),
       actualDurations: [],
@@ -724,7 +724,7 @@ export default function Home() {
       estimatedDuration: taskData.estimatedDuration,
       priority: taskData.priority,
       category: taskData.category,
-      dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
+      dueDate: taskData.dueDate ? parseLocalDateInput(taskData.dueDate) : undefined,
       id: uuidv4(),
       createdAt: new Date(),
       actualDurations: [],
@@ -773,7 +773,11 @@ export default function Home() {
         throw new Error('No subtasks returned');
       }
 
-      const newTasks: Task[] = subtasks.map(
+      const ordered = [...subtasks].sort(
+        (a: { order: number }, b: { order: number }) => a.order - b.order
+      );
+      const dueDay = event.start ? parseLocalDateInput(formatDateToLocalISO(event.start)) : undefined;
+      const newTasks: Task[] = ordered.map(
         (st: { title: string; description?: string; estimatedMinutes?: number; order: number }) => ({
           id: uuidv4(),
           title: st.title,
@@ -781,7 +785,8 @@ export default function Home() {
           estimatedDuration: st.estimatedMinutes ?? 60,
           priority: 'medium',
           category: '',
-          dueDate: event.start ? new Date(event.start) : undefined,
+          dueDate: dueDay,
+          planStepOrder: st.order,
           createdAt: new Date(),
           actualDurations: [],
         })

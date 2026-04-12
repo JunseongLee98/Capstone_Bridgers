@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { CalendarEvent } from '@/types';
+import { fetchGoogleCalendarEventsRest } from '@/lib/google-calendar-rest';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
 
@@ -43,39 +44,8 @@ export async function getTokensFromCode(code: string) {
 }
 
 export async function fetchGoogleCalendarEvents(accessToken: string, timeMin?: Date, timeMax?: Date): Promise<CalendarEvent[]> {
-  const auth = getAuthClient(accessToken);
-  const calendar = google.calendar({ version: 'v3', auth });
-
-  const now = new Date();
-  const minTime = timeMin || now;
-  const maxTime = timeMax || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days ahead
-
   try {
-    const response = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin: minTime.toISOString(),
-      timeMax: maxTime.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 2500,
-    });
-
-    const events = response.data.items || [];
-
-    return events.map((event): CalendarEvent => {
-      const start = event.start?.dateTime || event.start?.date;
-      const end = event.end?.dateTime || event.end?.date;
-
-      return {
-        id: event.id || `google-${Date.now()}-${Math.random()}`,
-        title: event.summary || '(No title)',
-        start: new Date(start || new Date()),
-        end: new Date(end || new Date()),
-        isScheduled: false,
-        color: '#4285f4', // Google Calendar blue
-        taskId: undefined,
-      };
-    });
+    return await fetchGoogleCalendarEventsRest(accessToken, timeMin, timeMax);
   } catch (error) {
     console.error('Error fetching Google Calendar events:', error);
     throw error;

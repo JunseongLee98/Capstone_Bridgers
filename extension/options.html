@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cadence — Options</title>
+    <link rel="stylesheet" href="dist/options.css" />
+  </head>
+  <body class="options-body">
+    <h1>Cadence settings</h1>
+    <p class="hint">
+      Create an OAuth 2.0 Client ID (Web application or Desktop) in Google Cloud Console. Add this
+      <strong>Authorized redirect URI</strong> (exactly):
+    </p>
+    <pre id="redirect-uri" class="code"></pre>
+    <label class="field">
+      <span>Google OAuth Client ID</span>
+      <input type="text" id="client-id" placeholder="xxx.apps.googleusercontent.com" autocomplete="off" />
+    </label>
+    <label class="field">
+      <span>OpenAI API key (optional — otherwise Ollama)</span>
+      <input type="password" id="openai-key" placeholder="sk-..." autocomplete="off" />
+    </label>
+    <label class="field">
+      <span>Ollama base URL</span>
+      <input type="text" id="ollama-url" placeholder="http://localhost:11434" />
+    </label>
+    <label class="field">
+      <span>Ollama model</span>
+      <input type="text" id="ollama-model" placeholder="llama3.2" />
+    </label>
+    <button type="button" id="save" class="btn">Save</button>
+    <p id="status" class="status" aria-live="polite"></p>
+    <script src="dist/options.js"></script>
+  </body>
+</html>
