@@ -66,6 +66,14 @@ export class CalendarAIAgent {
       chunks.push(Math.min(remaining, focusMinutes));
       remaining -= focusMinutes;
     }
+    // Merge a trailing fragment under 15m into the previous chunk (15m is the minimum gap size).
+    if (chunks.length >= 2) {
+      const tail = chunks[chunks.length - 1];
+      if (tail > 0 && tail < 15) {
+        chunks[chunks.length - 2] += tail;
+        chunks.pop();
+      }
+    }
     return chunks;
   }
 
@@ -262,6 +270,117 @@ export class CalendarAIAgent {
     return task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#10b981';
   }
 
+  private static localDayKey(d: Date): string {
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }
+
+  /**
+   * Find a gap to place up to `remainingMinutes`.
+   * If `spreadDayLoads` is set, pick the day with the fewest minutes already assigned to this task
+   * (then earliest start) so work spreads toward the due date instead of packing one day.
+   * If null, earliest feasible gap wins (used for ordered AI plan steps).
+   */
+  private static findBestPlacementGap(
+    emptySlots: TimeSlot[],
+    minStart: Date,
+    dueEnd: Date | null,
+    remainingMinutes: number,
+    spreadDayLoads: Map<string, number> | null
+  ): {
+    index: number;
+    useMinutes: number;
+    eventStart: Date;
+    eventEnd: Date;
+    dayKey: string;
+  } | null {
+    if (!spreadDayLoads) {
+      for (let i = 0; i < emptySlots.length; i++) {
+        const slot = emptySlots[i];
+        const effStart = new Date(Math.max(slot.start.getTime(), minStart.getTime()));
+        const slotEndCap =
+          dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
+        if (effStart.getTime() >= slotEndCap.getTime()) {
+          continue;
+        }
+
+        const slotAvail = Math.round(
+          (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
+        );
+        if (slotAvail < 15) {
+          continue;
+        }
+
+        const useMinutes = Math.min(remainingMinutes, slotAvail);
+        if (useMinutes < 15) {
+          continue;
+        }
+
+        const eventStart = new Date(effStart);
+        const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
+        const dayKey = this.localDayKey(eventStart);
+        return { index: i, useMinutes, eventStart, eventEnd, dayKey };
+      }
+      return null;
+    }
+
+    let best:
+      | {
+          index: number;
+          useMinutes: number;
+          eventStart: Date;
+          eventEnd: Date;
+          dayKey: string;
+          load: number;
+        }
+      | null = null;
+
+    for (let i = 0; i < emptySlots.length; i++) {
+      const slot = emptySlots[i];
+      const effStart = new Date(Math.max(slot.start.getTime(), minStart.getTime()));
+      const slotEndCap =
+        dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
+      if (effStart.getTime() >= slotEndCap.getTime()) {
+        continue;
+      }
+
+      const slotAvail = Math.round(
+        (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
+      );
+      if (slotAvail < 15) {
+        continue;
+      }
+
+      const useMinutes = Math.min(remainingMinutes, slotAvail);
+      if (useMinutes < 15) {
+        continue;
+      }
+
+      const eventStart = new Date(effStart);
+      const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
+      const dayKey = this.localDayKey(eventStart);
+      const load = spreadDayLoads.get(dayKey) ?? 0;
+
+      if (
+        !best ||
+        load < best.load ||
+        (load === best.load && eventStart.getTime() < best.eventStart.getTime())
+      ) {
+        best = { index: i, useMinutes, eventStart, eventEnd, dayKey, load };
+      }
+    }
+
+    if (!best) {
+      return null;
+    }
+    return {
+      index: best.index,
+      useMinutes: best.useMinutes,
+      eventStart: best.eventStart,
+      eventEnd: best.eventEnd,
+      dayKey: best.dayKey,
+    };
+  }
+
   /**
    * Distribute tasks across available calendar slots
    * breakAfterEventsMinutes: gap after each event/task before next can be scheduled
@@ -375,8 +494,13 @@ export class CalendarAIAgent {
     let prevPlanTaskScheduledSomething = false;
     let abandonRemainingPlanSteps = false;
 
+    let spreadDayLoads: Map<string, number> | null = null;
+    let spreadLoadsTaskId: string | null = null;
+
     for (const { task, duration, partIndex, totalParts, usesPlanOrder } of taskChunks) {
       if (usesPlanOrder) {
+        spreadDayLoads = null;
+        spreadLoadsTaskId = null;
         if (prevPlanTaskId !== null && prevPlanTaskId !== task.id) {
           if (!prevPlanTaskScheduledSomething) {
             abandonRemainingPlanSteps = true;
@@ -391,6 +515,14 @@ export class CalendarAIAgent {
         prevPlanTaskId = null;
         prevPlanTaskScheduledSomething = false;
         abandonRemainingPlanSteps = false;
+      }
+
+      const useSpread = !usesPlanOrder;
+      if (useSpread) {
+        if (spreadLoadsTaskId !== task.id) {
+          spreadDayLoads = new Map<string, number>();
+          spreadLoadsTaskId = task.id;
+        }
       }
 
       const dueEnd = this.getTaskDueDeadline(task);
@@ -451,34 +583,30 @@ export class CalendarAIAgent {
         );
 
         let placedThisRound = false;
-        for (let i = 0; i < emptySlots.length; i++) {
-          const slot = emptySlots[i];
-          const effStart = new Date(Math.max(slot.start.getTime(), minStartFresh.getTime()));
-          const slotEndCap =
-            dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
-          if (effStart.getTime() >= slotEndCap.getTime()) {
-            continue;
-          }
+        const gap = this.findBestPlacementGap(
+          emptySlots,
+          minStartFresh,
+          dueEnd,
+          remainingChunk,
+          useSpread ? spreadDayLoads : null
+        );
 
-          const slotAvail = Math.round(
-            (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
+        if (gap) {
+          applyPlacement(
+            gap.eventStart,
+            gap.eventEnd,
+            gap.index,
+            emptySlots[gap.index]
           );
-          if (slotAvail < 15) {
-            continue;
+          if (useSpread && spreadDayLoads) {
+            spreadDayLoads.set(
+              gap.dayKey,
+              (spreadDayLoads.get(gap.dayKey) ?? 0) + gap.useMinutes
+            );
           }
-
-          const useMinutes = Math.min(remainingChunk, slotAvail);
-          if (useMinutes < 15) {
-            continue;
-          }
-
-          const eventStart = new Date(effStart);
-          const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
-          applyPlacement(eventStart, eventEnd, i, slot);
-          remainingChunk -= useMinutes;
+          remainingChunk -= gap.useMinutes;
           placedThisRound = true;
           chunkHadPlacement = true;
-          break;
         }
 
         if (!placedThisRound) {
@@ -492,7 +620,8 @@ export class CalendarAIAgent {
             minStartFresh,
             partIndex,
             this.taskColor(task),
-            nextScheduleEventId
+            nextScheduleEventId,
+            useSpread ? spreadDayLoads : null
           );
           scheduledEvents.push(...splitResult.events);
           if (splitResult.lastEnd) {
@@ -574,75 +703,74 @@ export class CalendarAIAgent {
     minStart: Date,
     partIndex: number,
     color: string,
-    nextScheduleEventId: (taskId: string, tag: string) => string
+    nextScheduleEventId: (taskId: string, tag: string) => string,
+    spreadDayLoads: Map<string, number> | null = null
   ): { events: CalendarEvent[]; lastEnd: Date | null; remainingMinutes: number } {
     const events: CalendarEvent[] = [];
     let remainingDuration = duration;
     let subPart = 1;
     let lastEnd: Date | null = null;
+    let cursor = new Date(minStart.getTime());
 
-    for (let i = 0; i < emptySlots.length && remainingDuration > 0; ) {
-      const slot = emptySlots[i];
-      const effStart = new Date(Math.max(slot.start.getTime(), minStart.getTime()));
-      const slotEndCap =
-        dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
-      if (effStart.getTime() >= slotEndCap.getTime()) {
-        i++;
-        continue;
-      }
-
-      const slotDuration = Math.round(
-        (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
+    while (remainingDuration > 0) {
+      const gap = this.findBestPlacementGap(
+        emptySlots,
+        cursor,
+        dueEnd,
+        remainingDuration,
+        spreadDayLoads
       );
-
-      if (slotDuration < 15) {
-        emptySlots.splice(i, 1);
-        continue;
+      if (!gap) {
+        break;
       }
 
-      const durationToUse = Math.min(remainingDuration, slotDuration);
-      if (durationToUse < 15) {
-        i++;
-        continue;
-      }
-
-      const eventStart = new Date(effStart);
-      const eventEnd = new Date(eventStart.getTime() + durationToUse * 60 * 1000);
+      const i = gap.index;
+      const slotRow = emptySlots[i];
 
       events.push({
         id: nextScheduleEventId(task.id, `s${i}-p${partIndex}-sp${subPart}`),
         title: displayTitle,
-        start: eventStart,
-        end: eventEnd,
+        start: gap.eventStart,
+        end: gap.eventEnd,
         taskId: task.id,
         isScheduled: true,
         color,
       });
 
-      lastEnd = eventEnd;
-      remainingDuration -= durationToUse;
+      lastEnd = gap.eventEnd;
+      remainingDuration -= gap.useMinutes;
       subPart++;
 
+      if (spreadDayLoads) {
+        spreadDayLoads.set(
+          gap.dayKey,
+          (spreadDayLoads.get(gap.dayKey) ?? 0) + gap.useMinutes
+        );
+      }
+
       const slotAfterBreak = new Date(
-        eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
+        gap.eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
       );
-      if (slotAfterBreak >= slot.end) {
+      if (slotAfterBreak >= slotRow.end) {
         emptySlots.splice(i, 1);
       } else {
         const remainingTime = Math.round(
-          (slot.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
+          (slotRow.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
         );
         if (remainingTime < 15) {
           emptySlots.splice(i, 1);
         } else {
           emptySlots[i] = {
             start: slotAfterBreak,
-            end: slot.end,
+            end: slotRow.end,
             duration: remainingTime,
           };
-          i++;
         }
       }
+
+      cursor = new Date(
+        gap.eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
+      );
     }
 
     return { events, lastEnd, remainingMinutes: remainingDuration };
