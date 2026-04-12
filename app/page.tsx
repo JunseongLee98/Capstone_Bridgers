@@ -895,7 +895,7 @@ export default function Home() {
                 <button
                   onClick={triggerFileInput}
                   disabled={isImportingICS}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-sm"
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-s"
                   title="Import ICS calendar file"
                 >
                   <Upload size={20} />
@@ -903,7 +903,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setShowSubscriptionDialog(!showSubscriptionDialog)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-sm`}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-s`}
                   title="Subscribe to ICS calendar URL"
                 >
                   <Link2 size={20} />
@@ -1036,7 +1036,7 @@ export default function Home() {
                       <button
                         onClick={handleAddICSSubscription}
                         disabled={isLoadingICSSubscription || !newSubscriptionUrl.trim()}
-                        className="flex-1 px-4 py-2 bg-secondary/80 text-white rounded-lg hover:bg-secondary disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+                        className="flex-1 px-4 py-2 bg-secondary text-white rounded-lg font-normal hover:bg-secondary/90 disabled:bg-secondary/85 disabled:cursor-not-allowed transition-colors"
                       >
                         {isLoadingICSSubscription ? 'Adding...' : 'Add Subscription'}
                       </button>
@@ -1046,7 +1046,7 @@ export default function Home() {
                           setNewSubscriptionUrl('');
                           setNewSubscriptionName('');
                         }}
-                        className="px-4 py-2 bg-neutral text-primary rounded-lg hover:bg-neutral/80 transition-colors"
+                        className="px-4 py-2 bg-neutral text-primary font-normal rounded-lg hover:bg-neutral/80 transition-colors"
                       >
                         Cancel
                       </button>
@@ -1061,7 +1061,7 @@ export default function Home() {
                   onClick={() => {
                     setTasksDropdownOpen(!tasksDropdownOpen);
                   }}
-                  className={`flex items-center gap-3 px-6 py-2 rounded-lg bg-primary-light text-white font-semibold text-sm border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
+                  className={`flex items-center gap-5 px-5 py-2 rounded-lg bg-primary-light text-white font-semibold text-s border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
                   <Menu size={20} />
                   Tasks
                   {incompleteTasksCount > 0 && (
@@ -1089,7 +1089,7 @@ export default function Home() {
                           <button
                             onClick={triggerTasksFileInput}
                             disabled={isImportingICS}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-secondary-inactive text-white text-xs rounded-lg hover:bg-secondary-inactive/85 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-neutral font-medium text-gray-700 text-xs rounded-lg hover:bg-secondary-inactive/85 transition-colors disabled:opacity-50"
                             title="Import tasks from ICS file"
                           >
                             <Upload size={14} />
@@ -1097,7 +1097,7 @@ export default function Home() {
                           </button>
                           <button
                             onClick={() => setIsAddingTask(!isAddingTask)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-white text-sm rounded-lg hover:bg-secondary/90 transition-colors"
+                            className="flex items-center gap-2 px-3.5 py-1.5 bg-secondary font-medium text-white text-sm rounded-lg hover:bg-secondary/90 transition-colors"
                           >
                             <Plus size={16} />
                             Add Task

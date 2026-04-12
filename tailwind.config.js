@@ -20,7 +20,7 @@ module.exports = {
           800: '#075985',
           900: '#0c4a6e',
           dark: '#373147',
-          light: '#8677AD'
+          light: '#76689A'
         },
 
         secondary: {
