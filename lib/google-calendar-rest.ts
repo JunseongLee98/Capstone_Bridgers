@@ -1,4 +1,5 @@
 import type { CalendarEvent } from '@/types';
+import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
 
 /**
  * Fetch primary calendar events via Google Calendar API REST (no googleapis).
@@ -11,7 +12,9 @@ export async function fetchGoogleCalendarEventsRest(
 ): Promise<CalendarEvent[]> {
   const now = new Date();
   const minTime = timeMin || now;
-  const maxTime = timeMax || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const maxTime =
+    timeMax ||
+    new Date(now.getTime() + SCHEDULE_MAX_HORIZON_DAYS * 24 * 60 * 60 * 1000);
 
   const params = new URLSearchParams({
     timeMin: minTime.toISOString(),

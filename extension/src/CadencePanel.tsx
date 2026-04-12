@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Task, CalendarEvent, WorkHoursConfig } from '@/types';
 import { CalendarAIAgent } from '@/lib/ai-agent';
+import { SCHEDULE_MAX_HORIZON_DAYS } from '../../lib/schedule-constants';
 import { cadenceRequest } from '@/lib/cadence-request';
 import { parseICSFile } from '@/lib/ics-parser';
 
@@ -156,7 +157,9 @@ export function CadencePanel(): React.ReactElement {
     if (!tokens.access_token) throw new Error('No access token');
     const now = new Date();
     const timeMin = now.toISOString();
-    const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const timeMax = new Date(
+      now.getTime() + SCHEDULE_MAX_HORIZON_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString();
     const { events: evs } = await cadenceRequest<{ events: CalendarEvent[] }>({
       type: 'CADENCE_GET_GOOGLE_EVENTS',
       payload: { accessToken: tokens.access_token, timeMin, timeMax },
@@ -216,9 +219,7 @@ export function CadencePanel(): React.ReactElement {
 
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 14);
-    endDate.setHours(23, 59, 59, 999);
+    const endDate = CalendarAIAgent.computeScheduleEndDate([task], startDate);
     const allExisting = [...events, ...ge];
     const scheduled = CalendarAIAgent.distributeTasks(
       [task],
@@ -253,9 +254,7 @@ export function CadencePanel(): React.ReactElement {
       }
       const startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 14);
-      endDate.setHours(23, 59, 59, 999);
+      const endDate = CalendarAIAgent.computeScheduleEndDate(incomplete, startDate);
 
       let icsEvents: CalendarEvent[] = [];
       for (const sub of icsSubs) {
@@ -333,9 +332,7 @@ export function CadencePanel(): React.ReactElement {
 
       const startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 14);
-      endDate.setHours(23, 59, 59, 999);
+      const endDate = CalendarAIAgent.computeScheduleEndDate(newTasks, startDate);
       const allExisting = [...events, ...ge];
       const scheduled = CalendarAIAgent.distributeTasks(
         newTasks,

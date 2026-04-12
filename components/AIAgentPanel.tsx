@@ -37,12 +37,9 @@ export default function AIAgentPanel({
       return;
     }
 
-    // Calculate date range (next 2 weeks)
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 14);
-    endDate.setHours(23, 59, 59, 999);
+    const endDate = CalendarAIAgent.computeScheduleEndDate(incompleteTasks, startDate);
 
     // Distribute tasks using user's work hours and scheduling settings
     const workHours = storage.getWorkHours();

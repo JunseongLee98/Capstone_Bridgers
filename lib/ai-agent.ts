@@ -1,5 +1,6 @@
 import { Task, CalendarEvent, TimeSlot, TaskDurationStats, WorkSegment } from '@/types';
 import { endOfLocalCalendarDay } from '@/lib/date-utils';
+import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
 
 /**
  * AI Agent that learns task durations and distributes tasks across calendar
@@ -211,6 +212,42 @@ export class CalendarAIAgent {
   private static getTaskDueDeadline(task: Task): Date | null {
     if (!task.dueDate) return null;
     return endOfLocalCalendarDay(task.dueDate);
+  }
+
+  /**
+   * End of the date range passed to {@link findEmptySlots} / {@link distributeTasks}.
+   * Always includes at least `minHorizonDays` after `rangeStart` (default two weeks) so tasks
+   * without a due still see a reasonable window. If any task has a `dueDate`, extends through the
+   * latest due (end of that local day), capped at `maxHorizonDays` to bound work in `findEmptySlots`.
+   */
+  static computeScheduleEndDate(
+    tasks: Task[],
+    rangeStart: Date = new Date(),
+    minHorizonDays: number = 14,
+    maxHorizonDays: number = SCHEDULE_MAX_HORIZON_DAYS
+  ): Date {
+    const start = new Date(rangeStart);
+    start.setHours(0, 0, 0, 0);
+
+    const minEnd = new Date(start);
+    minEnd.setDate(minEnd.getDate() + minHorizonDays);
+    minEnd.setHours(23, 59, 59, 999);
+
+    let latestDueMs = 0;
+    for (const t of tasks) {
+      const d = this.getTaskDueDeadline(t);
+      if (d) {
+        latestDueMs = Math.max(latestDueMs, d.getTime());
+      }
+    }
+
+    const capEnd = new Date(start);
+    capEnd.setDate(capEnd.getDate() + maxHorizonDays);
+    capEnd.setHours(23, 59, 59, 999);
+
+    const mergedMs = Math.max(minEnd.getTime(), latestDueMs || minEnd.getTime());
+    const merged = new Date(mergedMs);
+    return merged.getTime() > capEnd.getTime() ? capEnd : merged;
   }
 
   private static taskColor(task: Task): string {

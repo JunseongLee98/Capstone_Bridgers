@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Task, CalendarEvent } from '@/types';
 import { storage } from '@/lib/storage';
 import { CalendarAIAgent } from '@/lib/ai-agent';
+import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
 import { formatDateToLocalISO, parseLocalDateInput } from '@/lib/date-utils';
 import Calendar from '@/components/Calendar';
 import { v4 as uuidv4 } from 'uuid';
@@ -180,7 +181,9 @@ export default function Home() {
     try {
       const now = new Date();
       const timeMin = now.toISOString();
-      const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const timeMax = new Date(
+        now.getTime() + SCHEDULE_MAX_HORIZON_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString();
 
       const response = await fetch(
         `/api/calendar/events?access_token=${tokens.access_token}&timeMin=${timeMin}&timeMax=${timeMax}`
@@ -544,9 +547,7 @@ export default function Home() {
 
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 14);
-    endDate.setHours(23, 59, 59, 999);
+    const endDate = CalendarAIAgent.computeScheduleEndDate([task], startDate);
 
     // Use functional update with refs to ensure we have the latest state
     setEvents(prevEvents => {
@@ -592,9 +593,7 @@ export default function Home() {
 
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 14);
-    endDate.setHours(23, 59, 59, 999);
+    const endDate = CalendarAIAgent.computeScheduleEndDate(incompleteTasks, startDate);
 
     // Get current events using functional update to ensure we have latest state
     setEvents(currentEvents => {
@@ -795,9 +794,7 @@ export default function Home() {
 
       const startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 14);
-      endDate.setHours(23, 59, 59, 999);
+      const endDate = CalendarAIAgent.computeScheduleEndDate(newTasks, startDate);
       const allExistingEvents = [
         ...events,
         ...googleEventsRef.current,
