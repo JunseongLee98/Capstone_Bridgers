@@ -32,12 +32,25 @@ export function formatMinutesToHoursMinutes(minutes: number): string {
 }
 
 /**
- * Parse a human-readable time string back to minutes
- * Not currently used but available for future use
+ * Parse a human-readable time string back to minutes.
+ * Supports compact forms (`2h 30m`, `45m`, `1h`) and verbose forms (`1 hour 30 minutes`).
  */
 export function parseHoursMinutesToMinutes(timeString: string): number {
-  // This could parse strings like "1h 30m" or "1 hour 30 minutes"
-  // For now, we'll keep it simple and just use numeric input
-  return 0;
+  const s = timeString.trim().toLowerCase();
+  if (!s) return 0;
+
+  let total = 0;
+  const hourRe = /(\d+)\s*(?:h\b|hours?\b)/gi;
+  let hm: RegExpExecArray | null;
+  while ((hm = hourRe.exec(s)) !== null) {
+    total += parseInt(hm[1], 10) * 60;
+  }
+
+  const minRe = /(\d+)\s*(?:m\b|minutes?\b)/gi;
+  while ((hm = minRe.exec(s)) !== null) {
+    total += parseInt(hm[1], 10);
+  }
+
+  return total;
 }
 

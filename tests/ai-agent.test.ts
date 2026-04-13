@@ -1,0 +1,334 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CalendarAIAgent } from '@/lib/ai-agent';
+import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
+import type { CalendarEvent, Task } from '@/types';
+import { makeTask } from './helpers/task-factory';
+
+function eventMinutesForTask(events: CalendarEvent[], taskId: string): number {
+  return events
+    .filter((e) => e.taskId === taskId)
+    .reduce((acc, e) => acc + (e.end.getTime() - e.start.getTime()) / (1000 * 60), 0);
+}
+
+function baseTask(overrides: Partial<Task> & Pick<Task, 'title'>): Task {
+  return makeTask(overrides);
+}
+
+describe('CalendarAIAgent.calculateTaskDuration', () => {
+  it('uses estimate for incomplete task when set (number)', () => {
+    const t = baseTask({
+      title: 'A',
+      estimatedDuration: 360,
+      actualDurations: [],
+    });
+    expect(CalendarAIAgent.calculateTaskDuration(t)).toBe(360);
+  });
+
+  it('parses string estimate for incomplete task', () => {
+    const t = baseTask({
+      title: 'A',
+      estimatedDuration: '240' as unknown as number,
+      actualDurations: [],
+    });
+    expect(CalendarAIAgent.calculateTaskDuration(t)).toBe(240);
+  });
+
+  it('defaults to 60 when no estimate and no actuals', () => {
+    const t = baseTask({ title: 'A', actualDurations: [] });
+    expect(CalendarAIAgent.calculateTaskDuration(t)).toBe(60);
+  });
+
+  it('treats non-numeric string estimate as missing', () => {
+    const t = baseTask({
+      title: 'A',
+      estimatedDuration: 'abc' as unknown as number,
+      actualDurations: [],
+    });
+    expect(CalendarAIAgent.calculateTaskDuration(t)).toBe(60);
+  });
+
+  it('uses average of actuals when present and no active estimate branch for completed', () => {
+    const t = baseTask({
+      title: 'A',
+      estimatedDuration: 120,
+      actualDurations: [100, 140],
+      completedAt: new Date(),
+    });
+    expect(CalendarAIAgent.calculateTaskDuration(t)).toBe(120);
+  });
+
+  it('handles huge estimate', () => {
+    const t = baseTask({
+      title: 'A',
+      estimatedDuration: 60 * 24 * 14,
+      actualDurations: [],
+    });
+    expect(CalendarAIAgent.calculateTaskDuration(t)).toBe(60 * 24 * 14);
+  });
+});
+
+describe('CalendarAIAgent.chunkDurationByFocus', () => {
+  it('splits 120 min with focus 50', () => {
+    expect(CalendarAIAgent.chunkDurationByFocus(120, 50)).toEqual([50, 50, 20]);
+  });
+
+  it('merges tail under 15 into previous chunk', () => {
+    const c = CalendarAIAgent.chunkDurationByFocus(360, 50);
+    expect(c.reduce((a, b) => a + b, 0)).toBe(360);
+    expect(c.every((x) => x >= 15 || c.length === 1)).toBe(true);
+  });
+
+  it('handles focus equal to duration', () => {
+    expect(CalendarAIAgent.chunkDurationByFocus(50, 50)).toEqual([50]);
+  });
+
+  it('handles tiny duration', () => {
+    expect(CalendarAIAgent.chunkDurationByFocus(5, 50)).toEqual([5]);
+  });
+});
+
+describe('CalendarAIAgent.findEmptySlots', () => {
+  it('skips weekends', () => {
+    const start = new Date(2026, 3, 13);
+    const end = new Date(2026, 3, 19);
+    const slots = CalendarAIAgent.findEmptySlots([], start, end, 9, 18, 0);
+    const days = new Set(
+      slots.map((s) => `${s.start.getFullYear()}-${s.start.getMonth()}-${s.start.getDate()}`)
+    );
+    for (const s of slots) {
+      const dow = s.start.getDay();
+      expect(dow).not.toBe(0);
+      expect(dow).not.toBe(6);
+    }
+    expect(days.size).toBeGreaterThan(0);
+  });
+
+  it('clips all-day style busy block to work window', () => {
+    const day = new Date(2026, 3, 15);
+    const busyStart = new Date(day);
+    busyStart.setHours(0, 0, 0, 0);
+    const busyEnd = new Date(day);
+    busyEnd.setHours(23, 59, 59, 999);
+    const busy: CalendarEvent = {
+      id: 'b',
+      title: 'busy',
+      start: busyStart,
+      end: busyEnd,
+      isScheduled: false,
+    };
+    const slots = CalendarAIAgent.findEmptySlots([busy], day, day, 9, 18, 0);
+    expect(slots.length).toBe(0);
+  });
+
+  it('respects break after events', () => {
+    const day = new Date(2026, 3, 15);
+    const e0 = new Date(day);
+    e0.setHours(9, 0, 0, 0);
+    const e1 = new Date(day);
+    e1.setHours(10, 0, 0, 0);
+    const ev: CalendarEvent = {
+      id: 'e',
+      title: 'm',
+      start: e0,
+      end: e1,
+      isScheduled: false,
+    };
+    const slots = CalendarAIAgent.findEmptySlots([ev], day, day, 9, 18, 30);
+    const first = slots[0];
+    expect(first.start.getHours()).toBeGreaterThanOrEqual(10);
+    expect(first.start.getHours() * 60 + first.start.getMinutes()).toBeGreaterThanOrEqual(10 * 60 + 30);
+  });
+});
+
+describe('CalendarAIAgent.computeScheduleEndDate', () => {
+  it('extends at least minHorizonDays without dues', () => {
+    const start = new Date(2026, 0, 1, 0, 0, 0, 0);
+    const t = baseTask({ title: 'x', actualDurations: [] });
+    const end = CalendarAIAgent.computeScheduleEndDate([t], start, 14, SCHEDULE_MAX_HORIZON_DAYS);
+    const min = new Date(start);
+    min.setDate(min.getDate() + 14);
+    expect(end.getTime()).toBeGreaterThanOrEqual(
+      new Date(min.getFullYear(), min.getMonth(), min.getDate(), 23, 59, 59, 999).getTime() - 1
+    );
+  });
+
+  it('extends through latest due', () => {
+    const start = new Date(2026, 0, 1, 0, 0, 0, 0);
+    const due = new Date(2026, 1, 20, 0, 0, 0, 0);
+    const t = baseTask({ title: 'x', dueDate: due, actualDurations: [] });
+    const end = CalendarAIAgent.computeScheduleEndDate([t], start, 14, SCHEDULE_MAX_HORIZON_DAYS);
+    expect(end.getMonth()).toBe(1);
+    expect(end.getDate()).toBeGreaterThanOrEqual(20);
+  });
+
+  it('respects maxHorizonDays cap', () => {
+    const start = new Date(2026, 0, 1, 0, 0, 0, 0);
+    const due = new Date(2027, 5, 1);
+    const t = baseTask({ title: 'x', dueDate: due, actualDurations: [] });
+    const end = CalendarAIAgent.computeScheduleEndDate([t], start, 14, 30);
+    const cap = new Date(start);
+    cap.setDate(cap.getDate() + 30);
+    expect(end.getTime()).toBeLessThanOrEqual(
+      new Date(cap.getFullYear(), cap.getMonth(), cap.getDate(), 23, 59, 59, 999).getTime() + 1
+    );
+  });
+});
+
+describe('CalendarAIAgent.distributeTasks', () => {
+  const monday = new Date(2026, 3, 13);
+  const saturdayDue = new Date(2026, 3, 18);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 13, 14, 0, 0, 0));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('schedules full 6h estimate across weekdays before Saturday due (empty calendar)', () => {
+    const startDate = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const endDate = CalendarAIAgent.computeScheduleEndDate(
+      [
+        baseTask({
+          title: 'Big',
+          id: 'big-1',
+          estimatedDuration: 360,
+          dueDate: saturdayDue,
+          actualDurations: [],
+        }),
+      ],
+      startDate
+    );
+    const task = baseTask({
+      title: 'Big',
+      id: 'big-1',
+      estimatedDuration: 360,
+      dueDate: saturdayDue,
+      actualDurations: [],
+    });
+    const events = CalendarAIAgent.distributeTasks([task], [], startDate, endDate, [
+      { startHour: 9, endHour: 18 },
+    ]);
+    const mins = eventMinutesForTask(events, 'big-1');
+    expect(mins).toBe(360);
+    const days = new Set(events.map((e) => e.start.getDate()));
+    expect(days.size).toBeGreaterThan(1);
+  });
+
+  it('returns empty when no tasks', () => {
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 4, 1, 0, 0, 0, 0);
+    expect(CalendarAIAgent.distributeTasks([], [], start, end)).toEqual([]);
+  });
+
+  it('deduplicates duplicate task ids', () => {
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 25, 0, 0, 0, 0);
+    const t = baseTask({
+      title: 'Dup',
+      id: 'same',
+      estimatedDuration: 120,
+      actualDurations: [],
+    });
+    const events = CalendarAIAgent.distributeTasks([t, t], [], start, end, [{ startHour: 9, endHour: 18 }]);
+    expect(eventMinutesForTask(events, 'same')).toBe(120);
+  });
+
+  it('schedules higher-priority work before lower-priority when both need the same early gaps', () => {
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 25, 0, 0, 0, 0);
+    const low = baseTask({
+      title: 'Low',
+      id: 'low',
+      priority: 'low',
+      estimatedDuration: 120,
+      actualDurations: [],
+    });
+    const high = baseTask({
+      title: 'High',
+      id: 'high',
+      priority: 'high',
+      estimatedDuration: 120,
+      actualDurations: [],
+    });
+    const events = CalendarAIAgent.distributeTasks([low, high], [], start, end, [{ startHour: 9, endHour: 18 }]);
+    const minHigh = Math.min(...events.filter((e) => e.taskId === 'high').map((e) => e.start.getTime()));
+    const minLow = Math.min(...events.filter((e) => e.taskId === 'low').map((e) => e.start.getTime()));
+    expect(minHigh).toBeLessThanOrEqual(minLow);
+  });
+
+  it('places work inside multiple disjoint work segments', () => {
+    vi.setSystemTime(new Date(2026, 3, 15, 8, 0, 0, 0));
+    const start = new Date(2026, 3, 15, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 16, 0, 0, 0, 0);
+    const task = baseTask({
+      title: 'Split day',
+      id: 'seg-1',
+      estimatedDuration: 180,
+      actualDurations: [],
+    });
+    const events = CalendarAIAgent.distributeTasks(
+      [task],
+      [],
+      start,
+      end,
+      [
+        { startHour: 9, endHour: 11 },
+        { startHour: 14, endHour: 17 },
+      ]
+    );
+    expect(eventMinutesForTask(events, 'seg-1')).toBe(180);
+    const hours = events.map((e) => e.start.getHours());
+    expect(Math.min(...hours)).toBeGreaterThanOrEqual(9);
+    expect(Math.max(...hours)).toBeLessThan(17);
+  });
+
+  it('respects due date cap', () => {
+    vi.setSystemTime(new Date(2026, 3, 13, 9, 0, 0, 0));
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 20, 0, 0, 0, 0);
+    const due = new Date(2026, 3, 14, 0, 0, 0, 0);
+    const task = baseTask({
+      title: 'DueSoon',
+      id: 'due-soon',
+      estimatedDuration: 240,
+      dueDate: due,
+      actualDurations: [],
+    });
+    const events = CalendarAIAgent.distributeTasks([task], [], start, end, [{ startHour: 9, endHour: 18 }]);
+    for (const e of events) {
+      expect(e.end.getTime()).toBeLessThanOrEqual(
+        new Date(2026, 3, 14, 23, 59, 59, 999).getTime() + 1
+      );
+    }
+  });
+});
+
+describe('CalendarAIAgent.getTaskDurationStats', () => {
+  it('returns defaults when no actuals', () => {
+    const t = baseTask({ title: 'A', id: '1', estimatedDuration: 90, actualDurations: [] });
+    const [s] = CalendarAIAgent.getTaskDurationStats([t]);
+    expect(s.averageDuration).toBe(90);
+    expect(s.completionCount).toBe(0);
+  });
+
+  it('computes stats from actuals', () => {
+    const t = baseTask({ title: 'A', id: '1', actualDurations: [10, 30, 50] });
+    const [s] = CalendarAIAgent.getTaskDurationStats([t]);
+    expect(s.averageDuration).toBe(30);
+    expect(s.minDuration).toBe(10);
+    expect(s.maxDuration).toBe(50);
+    expect(s.completionCount).toBe(3);
+  });
+});
+
+describe('CalendarAIAgent.recordTaskCompletion', () => {
+  it('appends actual duration and sets completedAt', () => {
+    const t = baseTask({ title: 'A', id: '1', actualDurations: [10] });
+    const done = CalendarAIAgent.recordTaskCompletion(t, 25);
+    expect(done.actualDurations).toEqual([10, 25]);
+    expect(done.completedAt).toBeInstanceOf(Date);
+  });
+});
