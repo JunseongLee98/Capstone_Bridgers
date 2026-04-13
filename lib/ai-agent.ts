@@ -4,6 +4,10 @@ import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
 
 /**
  * AI Agent that learns task durations and distributes tasks across calendar
+ *
+ * Task placement follows the pre–spread-algorithm approach (aligned with commit 9e57a2c):
+ * global chunk sort by priority then shorter-first, first-fit into earliest gaps, then split.
+ * Due dates cap usable slot ends; findEmptySlots clips long events to the work window.
  */
 export class CalendarAIAgent {
   /**
@@ -12,16 +16,22 @@ export class CalendarAIAgent {
   static calculateTaskDuration(task: Task): number {
     // For work not done yet, always plan from the user's estimate when they set one.
     // Otherwise a short first completion (e.g. 30m) would shrink all future schedules.
-    if (
-      !task.completedAt &&
-      task.estimatedDuration != null &&
-      task.estimatedDuration > 0
-    ) {
-      return task.estimatedDuration;
+    const estRaw = task.estimatedDuration as unknown;
+    const estNum =
+      typeof estRaw === 'string'
+        ? parseInt(estRaw, 10)
+        : typeof estRaw === 'number'
+          ? estRaw
+          : NaN;
+    if (!task.completedAt && !Number.isNaN(estNum) && estNum > 0) {
+      return estNum;
     }
 
     if (task.actualDurations.length === 0) {
-      return task.estimatedDuration && task.estimatedDuration > 0 ? task.estimatedDuration : 60;
+      if (!Number.isNaN(estNum) && estNum > 0) {
+        return estNum;
+      }
+      return 60;
     }
 
     const sum = task.actualDurations.reduce((acc, duration) => acc + duration, 0);
@@ -63,8 +73,9 @@ export class CalendarAIAgent {
     const chunks: number[] = [];
     let remaining = duration;
     while (remaining > 0) {
-      chunks.push(Math.min(remaining, focusMinutes));
-      remaining -= focusMinutes;
+      const piece = Math.min(remaining, focusMinutes);
+      chunks.push(piece);
+      remaining -= piece;
     }
     // Merge a trailing fragment under 15m into the previous chunk (15m is the minimum gap size).
     if (chunks.length >= 2) {
@@ -270,125 +281,10 @@ export class CalendarAIAgent {
     return task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#10b981';
   }
 
-  private static localDayKey(d: Date): string {
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  }
-
-  /**
-   * Find a gap to place up to `remainingMinutes`.
-   * If `spreadDayLoads` is set, pick the day with the fewest minutes already assigned to this task
-   * (then earliest start) so work spreads toward the due date instead of packing one day.
-   * If null, earliest feasible gap wins (used for ordered AI plan steps).
-   */
-  private static findBestPlacementGap(
-    emptySlots: TimeSlot[],
-    minStart: Date,
-    dueEnd: Date | null,
-    remainingMinutes: number,
-    spreadDayLoads: Map<string, number> | null
-  ): {
-    index: number;
-    useMinutes: number;
-    eventStart: Date;
-    eventEnd: Date;
-    dayKey: string;
-  } | null {
-    if (!spreadDayLoads) {
-      for (let i = 0; i < emptySlots.length; i++) {
-        const slot = emptySlots[i];
-        const effStart = new Date(Math.max(slot.start.getTime(), minStart.getTime()));
-        const slotEndCap =
-          dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
-        if (effStart.getTime() >= slotEndCap.getTime()) {
-          continue;
-        }
-
-        const slotAvail = Math.round(
-          (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
-        );
-        if (slotAvail < 15) {
-          continue;
-        }
-
-        const useMinutes = Math.min(remainingMinutes, slotAvail);
-        if (useMinutes < 15) {
-          continue;
-        }
-
-        const eventStart = new Date(effStart);
-        const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
-        const dayKey = this.localDayKey(eventStart);
-        return { index: i, useMinutes, eventStart, eventEnd, dayKey };
-      }
-      return null;
-    }
-
-    let best:
-      | {
-          index: number;
-          useMinutes: number;
-          eventStart: Date;
-          eventEnd: Date;
-          dayKey: string;
-          load: number;
-        }
-      | null = null;
-
-    for (let i = 0; i < emptySlots.length; i++) {
-      const slot = emptySlots[i];
-      const effStart = new Date(Math.max(slot.start.getTime(), minStart.getTime()));
-      const slotEndCap =
-        dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
-      if (effStart.getTime() >= slotEndCap.getTime()) {
-        continue;
-      }
-
-      const slotAvail = Math.round(
-        (slotEndCap.getTime() - effStart.getTime()) / (1000 * 60)
-      );
-      if (slotAvail < 15) {
-        continue;
-      }
-
-      const useMinutes = Math.min(remainingMinutes, slotAvail);
-      if (useMinutes < 15) {
-        continue;
-      }
-
-      const eventStart = new Date(effStart);
-      const eventEnd = new Date(eventStart.getTime() + useMinutes * 60 * 1000);
-      const dayKey = this.localDayKey(eventStart);
-      const load = spreadDayLoads.get(dayKey) ?? 0;
-
-      if (
-        !best ||
-        load < best.load ||
-        (load === best.load && eventStart.getTime() < best.eventStart.getTime())
-      ) {
-        best = { index: i, useMinutes, eventStart, eventEnd, dayKey, load };
-      }
-    }
-
-    if (!best) {
-      return null;
-    }
-    return {
-      index: best.index,
-      useMinutes: best.useMinutes,
-      eventStart: best.eventStart,
-      eventEnd: best.eventEnd,
-      dayKey: best.dayKey,
-    };
-  }
-
   /**
    * Distribute tasks across available calendar slots
    * breakAfterEventsMinutes: gap after each event/task before next can be scheduled
    * focusMinutes: max chunk size (tasks longer than this get split)
-   *
-   * - Respects task.dueDate: nothing extends past end of due day; truncates chunks to fit.
-   * - Tasks with planStepOrder (AI steps) are scheduled in step order; later steps never before earlier.
-   * - Parts of the same task stay chronological via per-task cursor.
    */
   static distributeTasks(
     tasks: Task[],
@@ -406,33 +302,16 @@ export class CalendarAIAgent {
       return true;
     });
 
-    const priorityRank = (t: Task) =>
-      t.priority === 'high' ? 3 : t.priority === 'medium' ? 2 : 1;
-
-    const withPlan = unique
-      .filter((t) => t.planStepOrder != null)
-      .sort((a, b) => (a.planStepOrder! - b.planStepOrder!));
-    const withoutPlan = unique
-      .filter((t) => t.planStepOrder == null)
-      .sort((a, b) => {
-        const pr = priorityRank(b) - priorityRank(a);
-        if (pr !== 0) return pr;
-        return a.createdAt.getTime() - b.createdAt.getTime();
-      });
-    const taskOrder = [...withPlan, ...withoutPlan];
-
-    type Chunk = {
+    const taskChunks: {
       task: Task;
       duration: number;
       partIndex: number;
       totalParts: number;
-      usesPlanOrder: boolean;
-    };
-
-    const taskChunks: Chunk[] = [];
-    for (const task of taskOrder) {
+      priority: number;
+    }[] = [];
+    for (const task of unique) {
       const fullDuration = this.calculateTaskDuration(task);
-      const usesPlanOrder = task.planStepOrder != null;
+      const priority = task.priority === 'high' ? 3 : task.priority === 'medium' ? 2 : 1;
       const chunks = this.chunkDurationByFocus(fullDuration, focusMinutes);
       chunks.forEach((duration, partIndex) => {
         taskChunks.push({
@@ -440,10 +319,18 @@ export class CalendarAIAgent {
           duration,
           partIndex,
           totalParts: chunks.length,
-          usesPlanOrder,
+          priority,
         });
       });
     }
+
+    // Sort by priority (high first), then by duration (shorter first for better fit)
+    taskChunks.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return b.priority - a.priority;
+      }
+      return a.duration - b.duration;
+    });
 
     const normalizedSegments = this.normalizeWorkSegments(workSegments);
 
@@ -469,7 +356,9 @@ export class CalendarAIAgent {
       }
 
       const slotStart = slot.start < now ? new Date(now) : slot.start;
-      const duration = Math.round((slot.end.getTime() - slotStart.getTime()) / (1000 * 60));
+      const duration = Math.round(
+        (slot.end.getTime() - slotStart.getTime()) / (1000 * 60)
+      );
 
       if (duration >= 15) {
         futureSlots.push({
@@ -484,57 +373,38 @@ export class CalendarAIAgent {
 
     const scheduledEvents: CalendarEvent[] = [];
     let scheduleIdSeq = 0;
-    const nextScheduleEventId = (taskId: string, tag: string) =>
-      `scheduled-${taskId}-${++scheduleIdSeq}-${tag}`;
+    const nextId = (taskId: string, partIndex: number, slotIdx: number, tag: string) =>
+      `scheduled-${taskId}-${++scheduleIdSeq}-s${slotIdx}-p${partIndex}-${tag}`;
 
-    let globalCursor = new Date(now);
-    const perTaskNextStart = new Map<string, Date>();
-
-    let prevPlanTaskId: string | null = null;
-    let prevPlanTaskScheduledSomething = false;
-    let abandonRemainingPlanSteps = false;
-
-    let spreadDayLoads: Map<string, number> | null = null;
-    let spreadLoadsTaskId: string | null = null;
-
-    for (const { task, duration, partIndex, totalParts, usesPlanOrder } of taskChunks) {
-      if (usesPlanOrder) {
-        spreadDayLoads = null;
-        spreadLoadsTaskId = null;
-        if (prevPlanTaskId !== null && prevPlanTaskId !== task.id) {
-          if (!prevPlanTaskScheduledSomething) {
-            abandonRemainingPlanSteps = true;
-          }
-          prevPlanTaskScheduledSomething = false;
-        }
-        prevPlanTaskId = task.id;
-        if (abandonRemainingPlanSteps) {
-          continue;
-        }
-      } else {
-        prevPlanTaskId = null;
-        prevPlanTaskScheduledSomething = false;
-        abandonRemainingPlanSteps = false;
-      }
-
-      const useSpread = !usesPlanOrder;
-      if (useSpread) {
-        if (spreadLoadsTaskId !== task.id) {
-          spreadDayLoads = new Map<string, number>();
-          spreadLoadsTaskId = task.id;
-        }
-      }
-
+    for (const { task, duration, partIndex, totalParts } of taskChunks) {
       const dueEnd = this.getTaskDueDeadline(task);
-
+      let scheduled = false;
       const displayTitle =
         totalParts > 1 ? `${task.title} (Part ${partIndex + 1}/${totalParts})` : task.title;
 
-      let placementFrag = 0;
-      const applyPlacement = (eventStart: Date, eventEnd: Date, slotIndex: number, slot: TimeSlot) => {
-        placementFrag += 1;
+      for (let i = 0; i < emptySlots.length; i++) {
+        const slot = emptySlots[i];
+        if (dueEnd && dueEnd.getTime() <= slot.start.getTime()) {
+          continue;
+        }
+        const slotEndCap =
+          dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
+        const slotDuration = Math.round(
+          (slotEndCap.getTime() - slot.start.getTime()) / (1000 * 60)
+        );
+
+        if (slotDuration < duration || slotDuration < 15) {
+          continue;
+        }
+
+        const eventStart = new Date(slot.start);
+        const eventEnd = new Date(eventStart.getTime() + duration * 60 * 1000);
+        if (dueEnd && eventEnd.getTime() > dueEnd.getTime()) {
+          continue;
+        }
+
         scheduledEvents.push({
-          id: nextScheduleEventId(task.id, `s${slotIndex}-p${partIndex}-f${placementFrag}`),
+          id: nextId(task.id, partIndex, i, 'fit'),
           title: displayTitle,
           start: eventStart,
           end: eventEnd,
@@ -542,113 +412,48 @@ export class CalendarAIAgent {
           isScheduled: true,
           color: this.taskColor(task),
         });
+
         const slotAfterBreak = new Date(
           eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
         );
         if (slotAfterBreak >= slot.end) {
-          emptySlots.splice(slotIndex, 1);
+          emptySlots.splice(i, 1);
         } else {
           const remainingTime = Math.round(
             (slot.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
           );
           if (remainingTime < 15) {
-            emptySlots.splice(slotIndex, 1);
+            emptySlots.splice(i, 1);
           } else {
-            emptySlots[slotIndex] = {
+            emptySlots[i] = {
               start: slotAfterBreak,
               end: slot.end,
               duration: remainingTime,
             };
           }
         }
-        const after = new Date(eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000);
-        perTaskNextStart.set(task.id, after);
-        if (usesPlanOrder) {
-          globalCursor = new Date(Math.max(globalCursor.getTime(), after.getTime()));
-        }
-      };
 
-      // Keep placing until this focus-chunk's minutes are exhausted. Previously we placed
-      // min(chunk, slot) once then moved on, which dropped the remainder and under-scheduled.
-      let remainingChunk = duration;
-      let chunkHadPlacement = false;
-
-      while (remainingChunk >= 15) {
-        const minStartFresh = new Date(
-          Math.max(
-            now.getTime(),
-            perTaskNextStart.get(task.id)?.getTime() ?? 0,
-            usesPlanOrder ? globalCursor.getTime() : 0
-          )
-        );
-
-        let placedThisRound = false;
-        const gap = this.findBestPlacementGap(
-          emptySlots,
-          minStartFresh,
-          dueEnd,
-          remainingChunk,
-          useSpread ? spreadDayLoads : null
-        );
-
-        if (gap) {
-          applyPlacement(
-            gap.eventStart,
-            gap.eventEnd,
-            gap.index,
-            emptySlots[gap.index]
-          );
-          if (useSpread && spreadDayLoads) {
-            spreadDayLoads.set(
-              gap.dayKey,
-              (spreadDayLoads.get(gap.dayKey) ?? 0) + gap.useMinutes
-            );
-          }
-          remainingChunk -= gap.useMinutes;
-          placedThisRound = true;
-          chunkHadPlacement = true;
-        }
-
-        if (!placedThisRound) {
-          const splitResult = this.splitTaskAcrossSlots(
-            task,
-            displayTitle,
-            remainingChunk,
-            emptySlots,
-            breakAfterEventsMinutes,
-            dueEnd,
-            minStartFresh,
-            partIndex,
-            this.taskColor(task),
-            nextScheduleEventId,
-            useSpread ? spreadDayLoads : null
-          );
-          scheduledEvents.push(...splitResult.events);
-          if (splitResult.lastEnd) {
-            const after = new Date(
-              splitResult.lastEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
-            );
-            perTaskNextStart.set(task.id, after);
-            if (usesPlanOrder) {
-              globalCursor = new Date(Math.max(globalCursor.getTime(), after.getTime()));
-            }
-          }
-          if (splitResult.events.length > 0) {
-            chunkHadPlacement = true;
-          }
-          remainingChunk = splitResult.remainingMinutes;
-          break;
-        }
+        scheduled = true;
+        break;
       }
 
-      const placed = chunkHadPlacement;
-      if (usesPlanOrder && placed) {
-        prevPlanTaskScheduledSomething = true;
+      if (!scheduled && duration > 0) {
+        const splitEvents = this.splitTaskAcrossSlots(
+          task,
+          displayTitle,
+          duration,
+          emptySlots,
+          breakAfterEventsMinutes,
+          dueEnd,
+          nextId,
+          partIndex
+        );
+        scheduledEvents.push(...splitEvents);
       }
     }
 
     const tasksById = new Map<string, Task>();
-    for (const task of tasks) {
+    for (const task of unique) {
       tasksById.set(task.id, task);
     }
 
@@ -663,27 +468,23 @@ export class CalendarAIAgent {
     for (const [taskId, taskEvents] of eventsByTaskId.entries()) {
       const task = tasksById.get(taskId);
       if (!task) continue;
-      if (task.planStepOrder != null) {
-        continue;
-      }
 
       taskEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
-      const totalParts = taskEvents.length;
+      const totalPartsFinal = taskEvents.length;
 
       for (let index = 0; index < taskEvents.length; index++) {
         const event = taskEvents[index];
         event.title =
-          totalParts > 1
-            ? `${task.title} (Part ${index + 1}/${totalParts})`
+          totalPartsFinal > 1
+            ? `${task.title} (Part ${index + 1}/${totalPartsFinal})`
             : task.title;
       }
     }
 
     const nowFinal = new Date();
     const constrainedEvents = scheduledEvents.filter((event) => {
-      if (event.start < nowFinal) {
-        return false;
-      }
+      if (event.start < nowFinal) return false;
+
       return this.eventStartWithinWorkSegments(event.start, normalizedSegments);
     });
 
@@ -698,82 +499,72 @@ export class CalendarAIAgent {
     displayTitle: string,
     duration: number,
     emptySlots: TimeSlot[],
-    breakAfterEventsMinutes: number,
-    dueEnd: Date | null,
-    minStart: Date,
-    partIndex: number,
-    color: string,
-    nextScheduleEventId: (taskId: string, tag: string) => string,
-    spreadDayLoads: Map<string, number> | null = null
-  ): { events: CalendarEvent[]; lastEnd: Date | null; remainingMinutes: number } {
+    breakAfterEventsMinutes: number = 0,
+    dueEnd: Date | null = null,
+    nextId: (taskId: string, partIndex: number, slotIdx: number, tag: string) => string,
+    partIndex: number
+  ): CalendarEvent[] {
     const events: CalendarEvent[] = [];
     let remainingDuration = duration;
     let subPart = 1;
-    let lastEnd: Date | null = null;
-    let cursor = new Date(minStart.getTime());
 
-    while (remainingDuration > 0) {
-      const gap = this.findBestPlacementGap(
-        emptySlots,
-        cursor,
-        dueEnd,
-        remainingDuration,
-        spreadDayLoads
+    for (let i = 0; i < emptySlots.length && remainingDuration > 0; ) {
+      const slot = emptySlots[i];
+      if (dueEnd && dueEnd.getTime() <= slot.start.getTime()) {
+        i++;
+        continue;
+      }
+      const slotEndCap =
+        dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
+      const slotDuration = Math.round(
+        (slotEndCap.getTime() - slot.start.getTime()) / (1000 * 60)
       );
-      if (!gap) {
-        break;
+
+      if (slotDuration < 15) {
+        emptySlots.splice(i, 1);
+        continue;
       }
 
-      const i = gap.index;
-      const slotRow = emptySlots[i];
+      const durationToUse = Math.min(remainingDuration, slotDuration);
+      const eventStart = new Date(slot.start);
+      const eventEnd = new Date(eventStart.getTime() + durationToUse * 60 * 1000);
 
       events.push({
-        id: nextScheduleEventId(task.id, `s${i}-p${partIndex}-sp${subPart}`),
+        id: nextId(task.id, partIndex, i, `sp${subPart}`),
         title: displayTitle,
-        start: gap.eventStart,
-        end: gap.eventEnd,
+        start: eventStart,
+        end: eventEnd,
         taskId: task.id,
         isScheduled: true,
-        color,
+        color: this.taskColor(task),
       });
 
-      lastEnd = gap.eventEnd;
-      remainingDuration -= gap.useMinutes;
+      remainingDuration -= durationToUse;
       subPart++;
 
-      if (spreadDayLoads) {
-        spreadDayLoads.set(
-          gap.dayKey,
-          (spreadDayLoads.get(gap.dayKey) ?? 0) + gap.useMinutes
-        );
-      }
-
       const slotAfterBreak = new Date(
-        gap.eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
+        eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
       );
-      if (slotAfterBreak >= slotRow.end) {
+      if (slotAfterBreak >= slot.end) {
         emptySlots.splice(i, 1);
       } else {
         const remainingTime = Math.round(
-          (slotRow.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
+          (slot.end.getTime() - slotAfterBreak.getTime()) / (1000 * 60)
         );
         if (remainingTime < 15) {
           emptySlots.splice(i, 1);
         } else {
           emptySlots[i] = {
             start: slotAfterBreak,
-            end: slotRow.end,
+            end: slot.end,
             duration: remainingTime,
           };
+          i++;
         }
       }
-
-      cursor = new Date(
-        gap.eventEnd.getTime() + breakAfterEventsMinutes * 60 * 1000
-      );
     }
 
-    return { events, lastEnd, remainingMinutes: remainingDuration };
+    return events;
   }
 
   /**
@@ -787,4 +578,3 @@ export class CalendarAIAgent {
     };
   }
 }
-
