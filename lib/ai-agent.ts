@@ -570,9 +570,10 @@ export class CalendarAIAgent {
       }
     }
 
-    const nowFinal = new Date();
+    // Use the same instant as slot clamping (`now` above), not `new Date()` here.
+    // Otherwise any block starting at that `now` can be dropped when real time advances by 1ms+.
     const constrainedEvents = scheduledEvents.filter((event) => {
-      if (event.start < nowFinal) return false;
+      if (event.start.getTime() < now.getTime()) return false;
 
       return this.eventStartWithinWorkSegments(event.start, normalizedSegments);
     });

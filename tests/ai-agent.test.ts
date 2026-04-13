@@ -187,6 +187,67 @@ describe('CalendarAIAgent.distributeTasks', () => {
     vi.useRealTimers();
   });
 
+  /**
+   * Mirrors production: task created Monday afternoon with due Friday same week,
+   * 6h estimate, default 9–18 work hours and empty busy calendar. The calendar must
+   * show the full 6h (not e.g. only Monday afternoon free window) spread across weekdays.
+   */
+  it('April 13–17 week: all 6 estimated hours appear on the calendar, spread past Monday', () => {
+    vi.setSystemTime(new Date(2026, 3, 13, 14, 0, 0, 0));
+
+    const startDate = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const dueFridayApril17 = new Date(2026, 3, 17, 0, 0, 0, 0);
+    const taskId = 'april-week-assignment';
+
+    const task = baseTask({
+      id: taskId,
+      title: 'Six-hour assignment',
+      estimatedDuration: 360,
+      dueDate: dueFridayApril17,
+      actualDurations: [],
+    });
+
+    const endDate = CalendarAIAgent.computeScheduleEndDate([task], startDate);
+
+    const calendarEvents = CalendarAIAgent.distributeTasks(
+      [task],
+      [],
+      startDate,
+      endDate,
+      [{ startHour: 9, endHour: 18 }],
+      5,
+      50
+    );
+
+    const estimatedMinutes = CalendarAIAgent.calculateTaskDuration(task);
+    const displayedWorkMinutes = eventMinutesForTask(calendarEvents, taskId);
+
+    expect(estimatedMinutes).toBe(360);
+    expect(displayedWorkMinutes).toBe(360);
+
+    const mondayAfternoonFree =
+      (18 - 14) * 60;
+    expect(mondayAfternoonFree).toBe(240);
+    expect(displayedWorkMinutes).toBeGreaterThan(mondayAfternoonFree);
+
+    const distinctCalendarDays = new Set(
+      calendarEvents
+        .filter((e) => e.taskId === taskId)
+        .map((e) => `${e.start.getFullYear()}-${e.start.getMonth() + 1}-${e.start.getDate()}`)
+    );
+    expect(distinctCalendarDays.size).toBeGreaterThanOrEqual(2);
+
+    for (const e of calendarEvents) {
+      if (e.taskId !== taskId) continue;
+      expect(e.end.getTime()).toBeLessThanOrEqual(
+        new Date(2026, 3, 17, 23, 59, 59, 999).getTime() + 1
+      );
+      const dow = e.start.getDay();
+      expect(dow).not.toBe(0);
+      expect(dow).not.toBe(6);
+    }
+  });
+
   it('schedules full 6h estimate across weekdays before Saturday due (empty calendar)', () => {
     const startDate = new Date(2026, 3, 13, 0, 0, 0, 0);
     const endDate = CalendarAIAgent.computeScheduleEndDate(
