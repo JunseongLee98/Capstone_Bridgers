@@ -3,14 +3,30 @@ import { endOfLocalCalendarDay } from '@/lib/date-utils';
 import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
 
 /**
- * AI Agent that learns task durations and distributes tasks across calendar
+ * AI Agent that learns task durations and distributes tasks across calendar.
  *
- * Placement: chunks sorted by priority then shorter-first; each focus-chunk is filled with
- * repeated partial placements until under 15m remains (avoids dropping the tail of a chunk).
- * Among equal choices, prefers the weekday with least time already booked for that task and
- * round-robins weekdays up to the due date so work is not packed onto the first open day only.
+ * Scheduling modes:
+ * - Manual tasks: spread across weekdays up to the due date by (a) filling focus-chunks fully,
+ *   (b) preferring days with lower load for that task, and (c) enforcing a per-day cap derived
+ *   from totalMinutes / weekdayCount (relaxed only when nothing fits).
+ * - AI breakdown steps (planStepOrder): scheduled strictly step-by-step in order; later steps
+ *   never occur before earlier steps. If a step cannot be placed at all, remaining steps are skipped.
  */
 export class CalendarAIAgent {
+  /** Heuristic: treat these as non-blocking all-day placeholders (Canvas due dates, holidays, etc). */
+  private static isAllDayLikeEvent(event: CalendarEvent): boolean {
+    const start = event.start;
+    const end = event.end;
+    const startAtMidnight = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+    const endAtMidnight = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0;
+    const durMs = end.getTime() - start.getTime();
+    // Many ICS feeds represent all-day items as [00:00, 00:00 next day] (24h),
+    // while Canvas sometimes exports assignment due dates as 00:00 with 0 duration.
+    const isZeroDurationMidnight = durMs === 0 && startAtMidnight && endAtMidnight;
+    const isFullDayOrMore = durMs >= 23 * 60 * 60 * 1000 && startAtMidnight && endAtMidnight;
+    return isZeroDurationMidnight || isFullDayOrMore;
+  }
+
   /**
    * Coerce UI / API duration input to a positive integer minute value (fallback 60).
    */
@@ -153,6 +169,10 @@ export class CalendarAIAgent {
       let currentTime = new Date(dayStart);
 
       for (const event of dayEvents) {
+        // Treat all-day events as informational (e.g. Canvas due dates) and do not block work time.
+        if (this.isAllDayLikeEvent(event)) {
+          continue;
+        }
         // Entirely before this work window
         if (event.end <= dayStart) {
           continue;
@@ -362,16 +382,30 @@ export class CalendarAIAgent {
       return true;
     });
 
+    const priorityRank = (t: Task) =>
+      t.priority === 'high' ? 3 : t.priority === 'medium' ? 2 : 1;
+
+    // Ensure AI breakdown steps run first, strictly ordered.
+    const withPlan = unique
+      .filter((t) => t.planStepOrder != null)
+      .sort((a, b) => (a.planStepOrder! - b.planStepOrder!));
+    const withoutPlan = unique
+      .filter((t) => t.planStepOrder == null)
+      .sort((a, b) => priorityRank(b) - priorityRank(a));
+    const taskOrder = [...withPlan, ...withoutPlan];
+
     const taskChunks: {
       task: Task;
       duration: number;
       partIndex: number;
       totalParts: number;
       priority: number;
+      usesPlanOrder: boolean;
     }[] = [];
-    for (const task of unique) {
+    for (const task of taskOrder) {
       const fullDuration = this.calculateTaskDuration(task);
       const priority = task.priority === 'high' ? 3 : task.priority === 'medium' ? 2 : 1;
+      const usesPlanOrder = task.planStepOrder != null;
       const chunks = this.chunkDurationByFocus(fullDuration, focusMinutes);
       chunks.forEach((duration, partIndex) => {
         taskChunks.push({
@@ -380,6 +414,7 @@ export class CalendarAIAgent {
           partIndex,
           totalParts: chunks.length,
           priority,
+          usesPlanOrder,
         });
       });
     }
@@ -440,6 +475,12 @@ export class CalendarAIAgent {
 
     const loadsByTask = new Map<string, Map<string, number>>();
     const rrByTask = new Map<string, number>();
+    const weekdayCycleByTask = new Map<string, string[]>();
+    const maxPerDayByTask = new Map<string, number>();
+    let globalCursor = new Date(now.getTime());
+    let prevPlanTaskId: string | null = null;
+    let prevPlanTaskPlacedSomething = false;
+    let skipRemainingPlanSteps = false;
 
     const getDayLoads = (taskId: string): Map<string, number> => {
       let m = loadsByTask.get(taskId);
@@ -450,34 +491,74 @@ export class CalendarAIAgent {
       return m;
     };
 
-    for (const { task, duration: chunkMinutes, partIndex, totalParts } of taskChunks) {
+    for (const { task, duration: chunkMinutes, partIndex, totalParts, usesPlanOrder } of taskChunks) {
       const dueEnd = this.getTaskDueDeadline(task);
       const displayTitle =
         totalParts > 1 ? `${task.title} (Part ${partIndex + 1}/${totalParts})` : task.title;
 
-      const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startMid = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const planStart = startMid.getTime() > todayMid.getTime() ? startMid : todayMid;
-      const lastInstant = dueEnd
-        ? new Date(Math.min(endDate.getTime(), dueEnd.getTime()))
-        : endDate;
-      const planEnd = new Date(
-        lastInstant.getFullYear(),
-        lastInstant.getMonth(),
-        lastInstant.getDate()
-      );
-      let weekdayCycle = this.listWeekdayKeysBetweenInclusive(planStart, planEnd);
-      if (weekdayCycle.length === 0) {
-        weekdayCycle = [this.localDayKey(planStart)];
+      // AI breakdown steps must remain sequential across steps.
+      if (usesPlanOrder) {
+        if (skipRemainingPlanSteps) {
+          continue;
+        }
+        if (prevPlanTaskId !== null && prevPlanTaskId !== task.id) {
+          if (!prevPlanTaskPlacedSomething) {
+            skipRemainingPlanSteps = true;
+            continue;
+          }
+          prevPlanTaskPlacedSomething = false;
+        }
+        prevPlanTaskId = task.id;
+      } else {
+        prevPlanTaskId = null;
+        prevPlanTaskPlacedSomething = false;
+        skipRemainingPlanSteps = false;
+      }
+
+      let weekdayCycle: string[] | null = null;
+      let maxPerDay: number | null = null;
+      if (!usesPlanOrder) {
+        weekdayCycle = weekdayCycleByTask.get(task.id) ?? null;
+        maxPerDay = maxPerDayByTask.get(task.id) ?? null;
+        if (!weekdayCycle || maxPerDay == null) {
+          const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const startMid = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            startDate.getDate()
+          );
+          const planStart = startMid.getTime() > todayMid.getTime() ? startMid : todayMid;
+          const lastInstant = dueEnd
+            ? new Date(Math.min(endDate.getTime(), dueEnd.getTime()))
+            : endDate;
+          const planEnd = new Date(
+            lastInstant.getFullYear(),
+            lastInstant.getMonth(),
+            lastInstant.getDate()
+          );
+          weekdayCycle = this.listWeekdayKeysBetweenInclusive(planStart, planEnd);
+          if (weekdayCycle.length === 0) {
+            weekdayCycle = [this.localDayKey(planStart)];
+          }
+          weekdayCycleByTask.set(task.id, weekdayCycle);
+
+          const totalMinutes = this.calculateTaskDuration(task);
+          maxPerDay = Math.ceil(totalMinutes / Math.max(1, weekdayCycle.length));
+          maxPerDayByTask.set(task.id, maxPerDay);
+        }
       }
 
       const dayLoads = getDayLoads(task.id);
       let remaining = chunkMinutes;
       let placeFrag = 0;
+      let placedAnyThisChunk = false;
 
       while (remaining >= 15) {
         const rr = rrByTask.get(task.id) ?? 0;
-        const prefDay = weekdayCycle.length > 0 ? weekdayCycle[rr % weekdayCycle.length] : null;
+        const prefDay =
+          !usesPlanOrder && weekdayCycle && weekdayCycle.length > 0
+            ? weekdayCycle[rr % weekdayCycle.length]
+            : null;
 
         type Cand = {
           i: number;
@@ -487,8 +568,10 @@ export class CalendarAIAgent {
           dayKey: string;
           load: number;
           onPref: boolean;
+          withinCap: boolean;
         };
         const cands: Cand[] = [];
+        const candsRelaxed: Cand[] = [];
 
         for (let i = 0; i < emptySlots.length; i++) {
           const slot = emptySlots[i];
@@ -497,8 +580,9 @@ export class CalendarAIAgent {
           }
           const slotEndCap =
             dueEnd && dueEnd.getTime() < slot.end.getTime() ? dueEnd : slot.end;
+          const minStart = usesPlanOrder ? globalCursor : now;
           const effStart =
-            slot.start.getTime() < now.getTime() ? new Date(now) : new Date(slot.start);
+            slot.start.getTime() < minStart.getTime() ? new Date(minStart) : new Date(slot.start);
           if (effStart.getTime() >= slotEndCap.getTime()) {
             continue;
           }
@@ -518,7 +602,8 @@ export class CalendarAIAgent {
           const dayKey = this.localDayKey(effStart);
           const load = dayLoads.get(dayKey) ?? 0;
           const onPref = prefDay !== null && dayKey === prefDay;
-          cands.push({
+          const withinCap = !usesPlanOrder && maxPerDay != null ? load + use <= maxPerDay : true;
+          const row: Cand = {
             i,
             use,
             start: effStart,
@@ -526,14 +611,25 @@ export class CalendarAIAgent {
             dayKey,
             load,
             onPref,
-          });
+            withinCap,
+          };
+          // First pass prefers spreading (cap), second pass relaxes if nothing fits.
+          if (withinCap) {
+            cands.push(row);
+          } else {
+            candsRelaxed.push(row);
+          }
         }
 
-        if (cands.length === 0) {
+        const pool = cands.length > 0 ? cands : candsRelaxed;
+        if (pool.length === 0) {
           break;
         }
 
-        cands.sort((a, b) => {
+        pool.sort((a, b) => {
+          if (usesPlanOrder) {
+            return a.start.getTime() - b.start.getTime();
+          }
           if (a.load !== b.load) {
             return a.load - b.load;
           }
@@ -543,7 +639,7 @@ export class CalendarAIAgent {
           return a.start.getTime() - b.start.getTime();
         });
 
-        const best = cands[0];
+        const best = pool[0];
         rrByTask.set(task.id, (rrByTask.get(task.id) ?? 0) + 1);
 
         const slotRow = emptySlots[best.i];
@@ -560,6 +656,7 @@ export class CalendarAIAgent {
 
         dayLoads.set(best.dayKey, (dayLoads.get(best.dayKey) ?? 0) + best.use);
         remaining -= best.use;
+        placedAnyThisChunk = true;
 
         const slotAfterBreak = new Date(
           best.end.getTime() + breakAfterEventsMinutes * 60 * 1000
@@ -580,6 +677,18 @@ export class CalendarAIAgent {
             };
           }
         }
+
+        if (usesPlanOrder) {
+          globalCursor = new Date(slotAfterBreak.getTime());
+        }
+      }
+
+      if (usesPlanOrder && placedAnyThisChunk) {
+        prevPlanTaskPlacedSomething = true;
+      }
+      if (usesPlanOrder && !placedAnyThisChunk) {
+        // Can't schedule this step at all → don't schedule later steps.
+        skipRemainingPlanSteps = true;
       }
     }
 

@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '@/types';
 import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
+import { parseLocalDateInput } from '@/lib/date-utils';
 
 /**
  * Fetch primary calendar events via Google Calendar API REST (no googleapis).
@@ -47,15 +48,24 @@ export async function fetchGoogleCalendarEventsRest(
     end?: { dateTime?: string; date?: string };
   }>;
 
+  const parseGoogleDate = (value: string | undefined): Date => {
+    if (!value) return new Date();
+    // Google returns all-day events as YYYY-MM-DD (no time). Parse as LOCAL midnight.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return parseLocalDateInput(value);
+    }
+    return new Date(value);
+  };
+
   return items.map((event): CalendarEvent => {
-    const start = event.start?.dateTime || event.start?.date;
-    const end = event.end?.dateTime || event.end?.date;
+    const startRaw = event.start?.dateTime || event.start?.date;
+    const endRaw = event.end?.dateTime || event.end?.date;
 
     return {
       id: event.id || `google-${Date.now()}-${Math.random()}`,
       title: event.summary || '(No title)',
-      start: new Date(start || new Date()),
-      end: new Date(end || new Date()),
+      start: parseGoogleDate(startRaw),
+      end: parseGoogleDate(endRaw),
       isScheduled: false,
       color: '#4285f4',
       taskId: undefined,

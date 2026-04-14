@@ -49,6 +49,8 @@ describe('fetchGoogleCalendarEventsRest', () => {
 
     const events = await fetchGoogleCalendarEventsRest('fake-token');
     expect(events[0].end.getTime()).toBeGreaterThanOrEqual(events[0].start.getTime());
+    expect(events[0].start.getHours()).toBe(0);
+    expect(events[0].start.getMinutes()).toBe(0);
   });
 
   it('throws with status on HTTP error', async () => {
@@ -77,7 +79,7 @@ describe('fetchGoogleCalendarEventsRest', () => {
     await fetchGoogleCalendarEventsRest('tok', min, max);
 
     expect(fetchMock).toHaveBeenCalled();
-    const url = String(fetchMock.mock.calls[0][0]);
+    const url = String((fetchMock as any).mock.calls[0][0]);
     expect(url).toContain('timeMin=');
     expect(url).toContain('timeMax=');
   });

@@ -134,6 +134,41 @@ describe('CalendarAIAgent.findEmptySlots', () => {
     expect(slots.length).toBe(0);
   });
 
+  it('ignores all-day placeholders when finding free work slots', () => {
+    const day = new Date(2026, 3, 15);
+    const allDayStart = new Date(day);
+    allDayStart.setHours(0, 0, 0, 0);
+    const allDayEnd = new Date(day);
+    allDayEnd.setDate(allDayEnd.getDate() + 1);
+    allDayEnd.setHours(0, 0, 0, 0);
+    const placeholder: CalendarEvent = {
+      id: 'all-day',
+      title: 'Canvas assignment due',
+      start: allDayStart,
+      end: allDayEnd,
+      isScheduled: false,
+    };
+    const slots = CalendarAIAgent.findEmptySlots([placeholder], day, day, 9, 18, 0);
+    // Work day should still be available: 9 hours = 540 minutes
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots[0].duration).toBeGreaterThanOrEqual(540);
+  });
+
+  it('ignores zero-duration midnight placeholders', () => {
+    const day = new Date(2026, 3, 15);
+    const t = new Date(day);
+    t.setHours(0, 0, 0, 0);
+    const placeholder: CalendarEvent = {
+      id: 'all-day-zero',
+      title: 'Due date',
+      start: new Date(t),
+      end: new Date(t),
+      isScheduled: false,
+    };
+    const slots = CalendarAIAgent.findEmptySlots([placeholder], day, day, 9, 18, 0);
+    expect(slots.length).toBeGreaterThan(0);
+  });
+
   it('respects break after events', () => {
     const day = new Date(2026, 3, 15);
     const e0 = new Date(day);
@@ -358,6 +393,44 @@ describe('CalendarAIAgent.distributeTasks', () => {
     const hours = events.map((e) => e.start.getHours());
     expect(Math.min(...hours)).toBeGreaterThanOrEqual(9);
     expect(Math.max(...hours)).toBeLessThan(17);
+  });
+
+  it('schedules AI breakdown steps strictly in order', () => {
+    vi.setSystemTime(new Date(2026, 3, 13, 9, 0, 0, 0));
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 20, 0, 0, 0, 0);
+
+    const due = new Date(2026, 3, 17, 0, 0, 0, 0);
+    const s1 = baseTask({
+      id: 'step-1',
+      title: 'Step 1',
+      estimatedDuration: 120,
+      actualDurations: [],
+      dueDate: due,
+      planStepOrder: 1,
+    });
+    const s2 = baseTask({
+      id: 'step-2',
+      title: 'Step 2',
+      estimatedDuration: 120,
+      actualDurations: [],
+      dueDate: due,
+      planStepOrder: 2,
+    });
+
+    const events = CalendarAIAgent.distributeTasks(
+      [s2, s1],
+      [],
+      start,
+      end,
+      [{ startHour: 9, endHour: 18 }],
+      5,
+      50
+    );
+
+    const first1 = Math.min(...events.filter((e) => e.taskId === 'step-1').map((e) => e.start.getTime()));
+    const first2 = Math.min(...events.filter((e) => e.taskId === 'step-2').map((e) => e.start.getTime()));
+    expect(first1).toBeLessThan(first2);
   });
 
   it('respects due date cap', () => {
