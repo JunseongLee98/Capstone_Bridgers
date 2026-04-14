@@ -63,6 +63,8 @@ export default function Home() {
     segments: [{ startHour: 9, endHour: 18 }],
   });
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
   const [breakAfterEvents, setBreakAfterEvents] = useState(5);
   const [tempBreakAfterEvents, setTempBreakAfterEvents] = useState(5);
   const [focusMinutes, setFocusMinutes] = useState(50);
@@ -159,7 +161,37 @@ export default function Home() {
       window.history.replaceState({}, '', window.location.pathname);
       fetchGoogleCalendarEvents();
     }
+
+    // First-time tutorial
+    try {
+      const completed = window.localStorage.getItem('cadence:tutorialCompleted');
+      if (!completed) {
+        setTutorialStep(0);
+        setShowTutorial(true);
+      }
+    } catch {
+      // ignore storage access errors
+    }
   }, []);
+
+  const startTutorial = () => {
+    try {
+      window.localStorage.removeItem('cadence:tutorialCompleted');
+    } catch {
+      // ignore
+    }
+    setTutorialStep(0);
+    setShowTutorial(true);
+  };
+
+  const completeTutorial = () => {
+    try {
+      window.localStorage.setItem('cadence:tutorialCompleted', '1');
+    } catch {
+      // ignore
+    }
+    setShowTutorial(false);
+  };
 
   // Auto-refresh ICS subscriptions more often so they feel live
   useEffect(() => {
@@ -2017,6 +2049,22 @@ export default function Home() {
                   ))}
                 </select>
               </div>
+
+              {/* Tutorial */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">Tutorial</h4>
+                <p className="text-xs text-gray-500 mb-2">Run the first-time setup walkthrough again</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettingsDialog(false);
+                    startTutorial();
+                  }}
+                  className="w-full px-4 py-2 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors text-sm font-medium"
+                >
+                  Replay tutorial
+                </button>
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
@@ -2048,6 +2096,140 @@ export default function Home() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* First-time Tutorial */}
+      {showTutorial && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+            <h3 className="text-xl font-bold text-primary mb-1">Welcome to Cadence</h3>
+            <p className="text-sm text-gray-600 mb-4">A quick walkthrough to get your schedule working</p>
+
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              {tutorialStep === 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-900">Step 1: Set your working hours</h4>
+                  <p className="text-sm text-gray-700">
+                    Cadence only schedules tasks inside your work blocks (Mon–Fri). Add multiple segments if you work
+                    split shifts.
+                  </p>
+                </div>
+              )}
+              {tutorialStep === 1 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-900">Step 2: Connect calendars</h4>
+                  <p className="text-sm text-gray-700">
+                    Use <span className="font-medium">Subscribe</span> for public ICS feeds or Google Calendar embed links.
+                    All-day placeholders (like Canvas due dates) won’t block scheduling.
+                  </p>
+                </div>
+              )}
+              {tutorialStep === 2 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-900">Step 3: Add a task</h4>
+                  <p className="text-sm text-gray-700">
+                    Create a manual task with an estimated duration and due date. Cadence will split it into focus-sized
+                    chunks and distribute it across available days.
+                  </p>
+                </div>
+              )}
+              {tutorialStep === 3 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-900">Step 4: Understand priority</h4>
+                  <p className="text-sm text-gray-700">
+                    High priority tends to claim earlier slots. Medium/Low will still schedule fully, but may be placed
+                    around higher-priority work.
+                  </p>
+                </div>
+              )}
+              {tutorialStep === 4 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-900">You’re ready</h4>
+                  <p className="text-sm text-gray-700">
+                    Tip: if your schedule looks too “chunky”, adjust <span className="font-medium">Focus Duration</span>{' '}
+                    in Settings.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-4">
+              {tutorialStep === 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTutorial(false);
+                    setShowSettingsDialog(true);
+                  }}
+                  className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                >
+                  Open Settings
+                </button>
+              )}
+              {tutorialStep === 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTutorial(false);
+                    setShowSubscriptionDialog(true);
+                  }}
+                  className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                >
+                  Open Subscribe
+                </button>
+              )}
+              {tutorialStep === 2 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTaskDurationMode('preset');
+                    setShowTutorial(false);
+                    setShowAddTaskDialog(true);
+                  }}
+                  className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                >
+                  Open Add Task
+                </button>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={completeTutorial}
+                className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/90 transition-colors"
+              >
+                Skip
+              </button>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={() => setTutorialStep((s) => Math.max(0, s - 1))}
+                disabled={tutorialStep === 0}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Back
+              </button>
+              {tutorialStep < 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setTutorialStep((s) => Math.min(4, s + 1))}
+                  className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={completeTutorial}
+                  className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors"
+                >
+                  Finish
+                </button>
+              )}
             </div>
           </div>
         </div>
