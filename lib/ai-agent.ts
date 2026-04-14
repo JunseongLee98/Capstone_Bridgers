@@ -12,6 +12,22 @@ import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
  */
 export class CalendarAIAgent {
   /**
+   * Coerce UI / API duration input to a positive integer minute value (fallback 60).
+   */
+  static coerceEstimatedMinutes(raw: unknown): number {
+    if (raw == null) return 60;
+    const n =
+      typeof raw === 'number'
+        ? raw
+        : typeof raw === 'string'
+          ? parseFloat(String(raw).trim())
+          : NaN;
+    if (!Number.isFinite(n) || n <= 0) return 60;
+    const rounded = Math.round(n);
+    return Math.min(Math.max(rounded, 15), 60 * 24 * 60);
+  }
+
+  /**
    * Calculate average duration for a task based on historical data
    */
   static calculateTaskDuration(task: Task): number {
@@ -20,7 +36,7 @@ export class CalendarAIAgent {
     const estRaw = task.estimatedDuration as unknown;
     const estNum =
       typeof estRaw === 'string'
-        ? parseInt(estRaw, 10)
+        ? parseFloat(String(estRaw).trim())
         : typeof estRaw === 'number'
           ? estRaw
           : NaN;
@@ -184,6 +200,30 @@ export class CalendarAIAgent {
     }
 
     return slots;
+  }
+
+  /**
+   * Merge overlapping or identical free slots so the same calendar window is never
+   * listed twice (which would let the scheduler place multiple chunks on duplicate rows
+   * and collapse visually to a shorter block on the calendar).
+   */
+  private static mergeOverlappingFreeSlots(slots: TimeSlot[]): TimeSlot[] {
+    if (slots.length === 0) return [];
+    const sorted = [...slots].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const out: TimeSlot[] = [];
+    for (const s of sorted) {
+      const cur = { start: new Date(s.start), end: new Date(s.end), duration: 0 };
+      cur.duration = Math.round((cur.end.getTime() - cur.start.getTime()) / (1000 * 60));
+      const last = out[out.length - 1];
+      if (last && cur.start.getTime() < last.end.getTime()) {
+        const newEndMs = Math.max(last.end.getTime(), cur.end.getTime());
+        last.end = new Date(newEndMs);
+        last.duration = Math.round((last.end.getTime() - last.start.getTime()) / (1000 * 60));
+      } else {
+        out.push(cur);
+      }
+    }
+    return out;
   }
 
   /**
@@ -389,7 +429,9 @@ export class CalendarAIAgent {
       }
     }
 
-    emptySlots = futureSlots.sort((a, b) => a.start.getTime() - b.start.getTime());
+    emptySlots = this.mergeOverlappingFreeSlots(
+      futureSlots.sort((a, b) => a.start.getTime() - b.start.getTime())
+    );
 
     const scheduledEvents: CalendarEvent[] = [];
     let scheduleIdSeq = 0;

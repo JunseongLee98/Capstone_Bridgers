@@ -14,6 +14,20 @@ function baseTask(overrides: Partial<Task> & Pick<Task, 'title'>): Task {
   return makeTask(overrides);
 }
 
+describe('CalendarAIAgent.coerceEstimatedMinutes', () => {
+  it('normalizes numbers and numeric strings', () => {
+    expect(CalendarAIAgent.coerceEstimatedMinutes(360)).toBe(360);
+    expect(CalendarAIAgent.coerceEstimatedMinutes(' 180.4 ')).toBe(180);
+  });
+
+  it('falls back to 60 for invalid input', () => {
+    expect(CalendarAIAgent.coerceEstimatedMinutes(undefined)).toBe(60);
+    expect(CalendarAIAgent.coerceEstimatedMinutes('')).toBe(60);
+    expect(CalendarAIAgent.coerceEstimatedMinutes(NaN)).toBe(60);
+    expect(CalendarAIAgent.coerceEstimatedMinutes(-10)).toBe(60);
+  });
+});
+
 describe('CalendarAIAgent.calculateTaskDuration', () => {
   it('uses estimate for incomplete task when set (number)', () => {
     const t = baseTask({

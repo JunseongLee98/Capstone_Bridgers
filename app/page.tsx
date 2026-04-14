@@ -13,6 +13,15 @@ import { Plus, X, Clock, CheckCircle2, ChevronDown, Menu, Calendar as CalendarIc
 import { parseICSFileFromFile, parseICSFileFromFileAsTasks, fetchICSFromURL } from '@/lib/ics-parser';
 import { formatMinutesToHoursMinutes } from '@/lib/time-utils';
 
+function dedupeCalendarEventsById(events: CalendarEvent[]): CalendarEvent[] {
+  const seen = new Set<string>();
+  return events.filter((e) => {
+    if (seen.has(e.id)) return false;
+    seen.add(e.id);
+    return true;
+  });
+}
+
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -514,7 +523,7 @@ export default function Home() {
     const newTask: Task = {
       title: taskData.title,
       description: taskData.description,
-      estimatedDuration: taskData.estimatedDuration,
+      estimatedDuration: CalendarAIAgent.coerceEstimatedMinutes(taskData.estimatedDuration),
       priority: taskData.priority,
       category: taskData.category,
       dueDate: taskData.dueDate ? parseLocalDateInput(taskData.dueDate) : undefined,
@@ -534,7 +543,8 @@ export default function Home() {
     });
     setIsAddingTask(false);
     setShowAddTaskDialog(false);
-    
+    setTaskDurationMode('preset');
+
     // Automatically schedule the newly created task
     scheduleNewTask(newTask);
   };
@@ -551,17 +561,18 @@ export default function Home() {
 
     // Use functional update with refs to ensure we have the latest state
     setEvents(prevEvents => {
-      // Use refs to get the latest googleEvents and icsSubscribedEvents
-      const allExistingEvents = [
-        ...prevEvents, 
-        ...googleEventsRef.current, 
-        ...icsSubscribedEventsRef.current
-      ];
-      
-      // Get current work hours
-      const currentWorkHours = storage.getWorkHours();
+      const allExistingEvents = dedupeCalendarEventsById([
+        ...prevEvents,
+        ...googleEventsRef.current,
+        ...icsSubscribedEventsRef.current,
+      ]);
 
-      // Schedule just this new task with custom work hours
+      const segments =
+        workHours.segments.length > 0 &&
+        workHours.segments.some((s) => s.startHour < s.endHour)
+          ? workHours.segments
+          : storage.getWorkHours().segments;
+
       const breakMinutes = storage.getBreakAfterEvents();
       const focusMinutes = storage.getFocusMinutes();
       const scheduledEvents = CalendarAIAgent.distributeTasks(
@@ -569,7 +580,7 @@ export default function Home() {
         allExistingEvents,
         startDate,
         endDate,
-        currentWorkHours.segments,
+        segments,
         breakMinutes,
         focusMinutes
       );
@@ -597,8 +608,12 @@ export default function Home() {
 
     // Get current events using functional update to ensure we have latest state
     setEvents(currentEvents => {
-      const allExistingEvents = [...currentEvents, ...googleEvents, ...icsSubscribedEvents];
-      
+      const allExistingEvents = dedupeCalendarEventsById([
+        ...currentEvents,
+        ...googleEvents,
+        ...icsSubscribedEvents,
+      ]);
+
       // Filter out already scheduled tasks (those with taskId in events)
       const scheduledTaskIds = new Set(currentEvents.filter(e => e.taskId).map(e => e.taskId));
       const unscheduledTasks = incompleteTasks.filter(task => !scheduledTaskIds.has(task.id));
@@ -607,8 +622,11 @@ export default function Home() {
         return currentEvents; // All tasks already scheduled
       }
 
-      // Get current work hours
-      const currentWorkHours = storage.getWorkHours();
+      const segments =
+        workHours.segments.length > 0 &&
+        workHours.segments.some((s) => s.startHour < s.endHour)
+          ? workHours.segments
+          : storage.getWorkHours().segments;
 
       const breakMinutes = storage.getBreakAfterEvents();
       const focusMinutes = storage.getFocusMinutes();
@@ -617,7 +635,7 @@ export default function Home() {
         allExistingEvents,
         startDate,
         endDate,
-        currentWorkHours.segments,
+        segments,
         breakMinutes,
         focusMinutes
       );
@@ -721,7 +739,7 @@ export default function Home() {
     const newTask: Task = {
       title: taskData.title,
       description: taskData.description,
-      estimatedDuration: taskData.estimatedDuration,
+      estimatedDuration: CalendarAIAgent.coerceEstimatedMinutes(taskData.estimatedDuration),
       priority: taskData.priority,
       category: taskData.category,
       dueDate: taskData.dueDate ? parseLocalDateInput(taskData.dueDate) : undefined,
@@ -795,12 +813,16 @@ export default function Home() {
       const startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
       const endDate = CalendarAIAgent.computeScheduleEndDate(newTasks, startDate);
-      const allExistingEvents = [
+      const allExistingEvents = dedupeCalendarEventsById([
         ...events,
         ...googleEventsRef.current,
         ...icsSubscribedEventsRef.current,
-      ];
-      const workHours = storage.getWorkHours();
+      ]);
+      const segments =
+        workHours.segments.length > 0 &&
+        workHours.segments.some((s) => s.startHour < s.endHour)
+          ? workHours.segments
+          : storage.getWorkHours().segments;
       const breakMinutes = storage.getBreakAfterEvents();
       const focusMinutes = storage.getFocusMinutes();
       const scheduledEvents = CalendarAIAgent.distributeTasks(
@@ -808,7 +830,7 @@ export default function Home() {
         allExistingEvents,
         startDate,
         endDate,
-        workHours.segments,
+        segments,
         breakMinutes,
         focusMinutes
       );
@@ -1099,7 +1121,10 @@ export default function Home() {
                             Import ICS
                           </button>
                           <button
-                            onClick={() => setIsAddingTask(!isAddingTask)}
+                            onClick={() => {
+                              setTaskDurationMode('preset');
+                              setIsAddingTask(!isAddingTask);
+                            }}
                             className="flex items-center gap-2 px-3.5 py-1.5 bg-secondary font-medium text-white text-sm rounded-lg hover:bg-secondary/90 transition-colors"
                           >
                             <Plus size={16} />
@@ -1150,6 +1175,13 @@ export default function Home() {
                                       const value = e.target.value;
                                       if (value === 'custom') {
                                         setTaskDurationMode('custom');
+                                        setNewTask((prev) => ({
+                                          ...prev,
+                                          estimatedDuration: Math.max(
+                                            15,
+                                            Math.round(taskDurationCustomHours * 60)
+                                          ),
+                                        }));
                                         return;
                                       }
                                       setTaskDurationMode('preset');
@@ -1393,6 +1425,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => {
+                  setTaskDurationMode('preset');
                   setShowAddTaskDialog(true);
                   setTasksDropdownOpen(false);
                   setIsAddingTask(false);
@@ -1476,6 +1509,13 @@ export default function Home() {
                           const value = e.target.value;
                           if (value === 'custom') {
                             setTaskDurationMode('custom');
+                            setNewTask((prev) => ({
+                              ...prev,
+                              estimatedDuration: Math.max(
+                                15,
+                                Math.round(taskDurationCustomHours * 60)
+                              ),
+                            }));
                             return;
                           }
                           setTaskDurationMode('preset');
@@ -1605,6 +1645,9 @@ export default function Home() {
                         const value = e.target.value;
                         if (value === 'custom') {
                           setConversionDurationMode('custom');
+                          setConversionDuration(
+                            Math.max(15, Math.round(conversionDurationCustomHours * 60))
+                          );
                           return;
                         }
                         setConversionDurationMode('preset');
