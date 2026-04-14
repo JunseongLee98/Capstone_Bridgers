@@ -419,13 +419,17 @@ export class CalendarAIAgent {
       });
     }
 
-    // Sort by priority (high first), then by duration (shorter first for better fit)
-    taskChunks.sort((a, b) => {
+    // Keep AI breakdown steps strictly ordered (step-by-step, then part-by-part).
+    // Non-plan tasks can still be optimized for fit by priority + shorter-first.
+    const planChunks = taskChunks.filter((c) => c.usesPlanOrder);
+    const nonPlanChunks = taskChunks.filter((c) => !c.usesPlanOrder);
+    nonPlanChunks.sort((a, b) => {
       if (a.priority !== b.priority) {
         return b.priority - a.priority;
       }
       return a.duration - b.duration;
     });
+    const orderedChunks = [...planChunks, ...nonPlanChunks];
 
     const normalizedSegments = this.normalizeWorkSegments(workSegments);
 
@@ -491,7 +495,7 @@ export class CalendarAIAgent {
       return m;
     };
 
-    for (const { task, duration: chunkMinutes, partIndex, totalParts, usesPlanOrder } of taskChunks) {
+    for (const { task, duration: chunkMinutes, partIndex, totalParts, usesPlanOrder } of orderedChunks) {
       const dueEnd = this.getTaskDueDeadline(task);
       const displayTitle =
         totalParts > 1 ? `${task.title} (Part ${partIndex + 1}/${totalParts})` : task.title;

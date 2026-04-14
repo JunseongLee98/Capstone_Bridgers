@@ -433,6 +433,56 @@ describe('CalendarAIAgent.distributeTasks', () => {
     expect(first1).toBeLessThan(first2);
   });
 
+  it('does not interleave plan steps even when chunk sizes differ', () => {
+    vi.setSystemTime(new Date(2026, 3, 13, 9, 0, 0, 0));
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 20, 0, 0, 0, 0);
+
+    const due = new Date(2026, 3, 17, 0, 0, 0, 0);
+    // Step 1 creates chunks [50, 10]; Step 2 creates chunks [50, 50, 20].
+    // A global "shorter-first" sort would try to place step-2's 20m before step-1's 50m,
+    // which breaks step ordering.
+    const s1 = baseTask({
+      id: 'step-1b',
+      title: 'Step 1b',
+      estimatedDuration: 60,
+      actualDurations: [],
+      dueDate: due,
+      planStepOrder: 1,
+      priority: 'medium',
+    });
+    const s2 = baseTask({
+      id: 'step-2b',
+      title: 'Step 2b',
+      estimatedDuration: 120,
+      actualDurations: [],
+      dueDate: due,
+      planStepOrder: 2,
+      priority: 'medium',
+    });
+
+    const events = CalendarAIAgent.distributeTasks(
+      [s2, s1],
+      [],
+      start,
+      end,
+      [{ startHour: 9, endHour: 18 }],
+      5,
+      50
+    );
+
+    const step1Ends = events
+      .filter((e) => e.taskId === 'step-1b')
+      .map((e) => e.end.getTime());
+    const step2Starts = events
+      .filter((e) => e.taskId === 'step-2b')
+      .map((e) => e.start.getTime());
+
+    expect(step1Ends.length).toBeGreaterThan(0);
+    expect(step2Starts.length).toBeGreaterThan(0);
+    expect(Math.max(...step1Ends)).toBeLessThanOrEqual(Math.min(...step2Starts));
+  });
+
   it('respects due date cap', () => {
     vi.setSystemTime(new Date(2026, 3, 13, 9, 0, 0, 0));
     const start = new Date(2026, 3, 13, 0, 0, 0, 0);
