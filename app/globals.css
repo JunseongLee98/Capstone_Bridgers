@@ -337,7 +337,7 @@ html.dark .rbc-month-row {
 
 /* Current day highlight */
 html.dark .rbc-today {
-  background-color: #413f4bd0;
+  background-color: #403e4dd0 !important;
 }
 
 /* Inactive days */
