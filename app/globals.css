@@ -46,7 +46,7 @@ body {
 }
 
 .rbc-today {
-  background-color: #f0f9ff;
+  background-color: #e6e4ec !important;
 }
 
 /* Make each hour taller in the time grid (tuned size) */
@@ -263,7 +263,7 @@ html.dark .hover\:bg-gray-300:hover {
 }
 
 .rbc-date-cell.rbc-now {
-  background-color: #e6e2f1;
+  background-color: #e6e4ec;
 }
 
 /* ==============================
