@@ -25,6 +25,7 @@ function dedupeCalendarEventsById(events: CalendarEvent[]): CalendarEvent[] {
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [darkMode, setDarkMode] = useState(false);
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTask, setNewTask] = useState({
@@ -173,6 +174,18 @@ export default function Home() {
       // ignore storage access errors
     }
   }, []);
+
+  // Load user's saved theme preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('cadence-theme');
+    setDarkMode(savedTheme === 'dark');
+  }, []);
+
+  // Apply theme changes
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem('cadence-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   const startTutorial = () => {
     try {
@@ -924,7 +937,7 @@ export default function Home() {
     <main className="h-screen flex flex-col bg-white">
       {/* Header with dropdowns */}
       <header className="p-4">
-        <div className="bg-primary-dark rounded-lg shadow-lg p-5">
+        <div className="bg-primary-dark rounded-lg shadow-lg p-5 border border-gray-200">
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center gap-3">
               <div className="relative h-12 w-[150px]">
@@ -1010,7 +1023,7 @@ export default function Home() {
                             type="button"
                             onClick={() => fetchAllICSSubscriptions()}
                             disabled={isLoadingICSSubscription}
-                            className="text-xs px-2 py-1 text-primary-600 hover:bg-primary-50 rounded border border-primary-200 transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 text-primary-600 hover:bg-primary-50/10 rounded transition-colors disabled:opacity-50"
                           >
                             {isLoadingICSSubscription ? 'Refreshing…' : 'Refresh all'}
                           </button>
@@ -1078,7 +1091,7 @@ export default function Home() {
                                 )}
                                 <button
                                   onClick={() => handleRemoveICSSubscription(sub.id)}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  className="p-1 text-red-400 hover:bg-red-50/20 rounded transition-colors"
                                   title="Remove subscription"
                                 >
                                   <Trash2 size={16} />
@@ -1103,7 +1116,7 @@ export default function Home() {
                           setNewSubscriptionUrl('');
                           setNewSubscriptionName('');
                         }}
-                        className="px-4 py-2 bg-neutral text-primary font-normal rounded-lg hover:bg-neutral/80 transition-colors"
+                        className="cancel-btn px-4 py-2 text-primary font-normal rounded-lg border transition-colors"
                       >
                         Cancel
                       </button>
@@ -1146,7 +1159,7 @@ export default function Home() {
                           <button
                             onClick={triggerTasksFileInput}
                             disabled={isImportingICS}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-neutral font-medium text-gray-700 text-xs rounded-lg hover:bg-secondary-inactive/85 transition-colors disabled:opacity-50"
+                            className="import-btn flex items-center gap-1.5 px-3.5 py-1.5 font-medium text-gray-700 text-xs rounded-lg border transition-colors disabled:opacity-50"
                             title="Import tasks from ICS file"
                           >
                             <Upload size={14} />
@@ -1157,7 +1170,7 @@ export default function Home() {
                               setTaskDurationMode('preset');
                               setIsAddingTask(!isAddingTask);
                             }}
-                            className="flex items-center gap-2 px-3.5 py-1.5 bg-secondary font-medium text-white text-sm rounded-lg hover:bg-secondary/90 transition-colors"
+                            className="dropdown-task-add-btn flex items-center gap-2 px-3.5 py-1.5 font-medium text-white text-sm rounded-lg transition-colors"
                           >
                             <Plus size={16} />
                             Add Task
@@ -1339,14 +1352,14 @@ export default function Home() {
                             <div className="flex gap-2">
                               <button
                                 type="submit"
-                                className="flex-1 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
+                                className="dropdown-add-btn flex-1 px-3 py-1.5 text-white font-normal text-sm rounded-lg"
                               >
                                 Add
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setIsAddingTask(false)}
-                                className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300"
+                                className="cancel-btn px-3 py-1.5 text-primary text-sm rounded-lg border"
                               >
                                 Cancel
                               </button>
@@ -1448,8 +1461,8 @@ export default function Home() {
 
       {/* Full-width Calendar */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="h-full w-full p-4">
-          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0">
+        <div className="h-full w-full p-4 ">
+          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0 border border-gray-200">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-gray-800">Calendar</h2>
@@ -1483,7 +1496,7 @@ export default function Home() {
       {/* Add Task Dialog (from calendar) */}
       {showAddTaskDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4 border border-gray-200">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-xl font-bold text-primary">Add Task</h3>
@@ -1629,7 +1642,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowAddTaskDialog(false)}
-                  className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/80 transition-colors"
+                  className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
                 >
                   Cancel
                 </button>
@@ -1729,7 +1742,7 @@ export default function Home() {
                 type="button"
                 onClick={() => handleBreakDownWithAI(selectedEvent)}
                 disabled={isDecomposingEvent}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="breakdown-btn w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isDecomposingEvent ? (
                   <>
@@ -1750,14 +1763,14 @@ export default function Home() {
             <div className="flex gap-3 mt-3">
               <button
                 onClick={() => handleConvertEventToTask(selectedEvent)}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                className="convert-task-btn flex-1 flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg transition-colors"
               >
                 <CheckSquare size={18} />
                 Convert to Task
               </button>
               <button
                 onClick={() => handleDeleteEvent(selectedEvent)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className="delete-btn px-4 py-2 text-white rounded-lg transition-colors"
               >
                 <Trash2 size={18} />
               </button>
@@ -1767,7 +1780,7 @@ export default function Home() {
                   setSelectedEvent(null);
                   setConversionDuration(60);
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
               >
                 Cancel
               </button>
@@ -1779,7 +1792,7 @@ export default function Home() {
       {/* Work Hours Settings Dialog (standalone - kept for any direct links) */}
       {showWorkHoursDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 ">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Set Work Hours</h3>
             <p className="text-sm text-gray-600 mb-4">
               Tasks will only be created and scheduled during these hours (Monday–Friday). You can define multiple work
@@ -1899,7 +1912,7 @@ export default function Home() {
                   setShowWorkHoursDialog(false);
                   setTempWorkHours(workHours);
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
               >
                 Cancel
               </button>
@@ -1911,7 +1924,7 @@ export default function Home() {
       {/* Settings Dialog */}
       {showSettingsDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto border border-gray-200">
             <h3 className="text-xl font-bold text-primary mb-1">Settings</h3>
             <p className="text-sm text-gray-600 mb-6">Configure scheduling and calendar behavior</p>
             
@@ -2050,6 +2063,32 @@ export default function Home() {
                 </select>
               </div>
 
+              {/* Appearance */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800 mb-2">Appearance</h4>
+              <p className="text-xs text-gray-500 mb-2">Toggle between light and dark mode</p>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">
+                  {darkMode ? 'Dark Mode' : 'Light Mode'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`theme-toggle relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    darkMode ? 'active' : ''
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      darkMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
               {/* Tutorial */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-800 mb-2">Tutorial</h4>
@@ -2060,7 +2099,7 @@ export default function Home() {
                     setShowSettingsDialog(false);
                     startTutorial();
                   }}
-                  className="w-full px-4 py-2 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors text-sm font-medium"
+                    className="replay-btn w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
                 >
                   Replay tutorial
                 </button>
@@ -2092,7 +2131,7 @@ export default function Home() {
                   setTempBreakAfterEvents(breakAfterEvents);
                   setTempFocusMinutes(focusMinutes);
                 }}
-                className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/90 transition-colors"
+                className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
               >
                 Cancel
               </button>
