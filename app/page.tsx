@@ -938,7 +938,7 @@ export default function Home() {
       {/* Header with dropdowns */}
       <header className="p-4">
         <div className="bg-primary-dark rounded-lg shadow-lg p-5 border border-gray-200">
-          <div className="flex items-center justify-between gap-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <div className="relative h-12 w-[150px]">
                 <Image
@@ -965,7 +965,7 @@ export default function Home() {
                 <button
                   onClick={triggerFileInput}
                   disabled={isImportingICS}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-s"
+                  className="import-btn flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-s"
                   title="Import ICS calendar file"
                 >
                   <Upload size={20} />
@@ -973,7 +973,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setShowSubscriptionDialog(!showSubscriptionDialog)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-s`}
+                  className={`subscribe-btn flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-s`}
                   title="Subscribe to ICS calendar URL"
                 >
                   <Link2 size={20} />
@@ -1131,7 +1131,7 @@ export default function Home() {
                   onClick={() => {
                     setTasksDropdownOpen(!tasksDropdownOpen);
                   }}
-                  className={`flex items-center gap-5 px-5 py-2 rounded-lg bg-primary-light text-white font-semibold text-s border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
+                  className={`task-dropdown-btn flex items-center gap-5 px-5 py-2 rounded-lg bg-primary-light text-white font-semibold text-s border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
                   <Menu size={20} />
                   Tasks
                   {incompleteTasksCount > 0 && (
@@ -1170,7 +1170,7 @@ export default function Home() {
                               setTaskDurationMode('preset');
                               setIsAddingTask(!isAddingTask);
                             }}
-                            className="dropdown-task-add-btn flex items-center gap-2 px-3.5 py-1.5 font-medium text-white text-sm rounded-lg transition-colors"
+                            className="task-dropdown-add-task-btn flex items-center gap-2 px-3.5 py-1.5 font-medium text-white text-sm rounded-lg transition-colors"
                           >
                             <Plus size={16} />
                             Add Task
@@ -1352,7 +1352,7 @@ export default function Home() {
                             <div className="flex gap-2">
                               <button
                                 type="submit"
-                                className="dropdown-add-btn flex-1 px-3 py-1.5 text-white font-normal text-sm rounded-lg"
+                                className="task-dropdown-add-btn flex-1 px-3 py-1.5 text-white font-normal text-sm rounded-lg"
                               >
                                 Add
                               </button>
@@ -1448,7 +1448,7 @@ export default function Home() {
                   setTempFocusMinutes(focusMinutes);
                   setShowSettingsDialog(true);
                 }}
-                className="ml-1 p-2.5 rounded-full bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
+                className="settings-btn ml-1 p-2.5 rounded-full bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
                 title="Settings"
                 aria-label="Settings"
               >
@@ -1475,7 +1475,7 @@ export default function Home() {
                   setTasksDropdownOpen(false);
                   setIsAddingTask(false);
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-light text-white border border-white/25 font-semibold shadow-md hover:bg-primary-light/90 transition-all"
+                className="add-task-btn flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-light text-white border border-white/25 font-semibold shadow-md hover:bg-primary-light/90 transition-all"
                 title="Add a new task"
               >
                 <Plus size={18} />

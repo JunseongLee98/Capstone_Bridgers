@@ -73,7 +73,7 @@ body {
   padding: 8px 16px;
   font-size: 14px;
   font-weight: 500;
-  transition: all 150ms ease;
+  transition: all 60ms ease;
 }
 
 .rbc-header {
@@ -130,8 +130,7 @@ body {
 
 /* Secondary button styles */
 .replay-btn,
-.cancel-btn,
-.import-btn {
+.cancel-btn {
   background-color: #eae9ee71;
   color: #383838;
   border-color: #d8d8d8;
@@ -139,8 +138,7 @@ body {
 }
 
 .replay-btn:hover,
-.cancel-btn:hover,
-.import-btn:hover {
+.cancel-btn:hover {
   background-color: #eaeaec;
 }
 
@@ -294,15 +292,21 @@ html.dark .rbc-toolbar-label {
   color: #f5f5f5;
 }
 
-/* Toolbar buttons */
+/* Date buttons */
 html.dark .rbc-toolbar .rbc-btn-group button {
-  background: #1e1e1e;
+  background: #393349;
   color: #f5f5f5;
-  border: 1px solid #2c2c2c;
+  border: 1px solid #504c5c;
 }
 
-html.dark .rbc-toolbar .rbc-btn-group button:hover {
-  background: #2a2a2a;
+/* Active buttons */
+html.dark .rbc-toolbar .rbc-btn-group button.rbc-active {
+  background-color: #3c364b;
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .rbc-toolbar .rbc-btn-group button:hover:not(.rbc-active) {
+  background: #4c455e;
 }
 
 /* Calendar text */
@@ -380,9 +384,21 @@ html.dark .rbc-current-time-indicator {
   background-color: #ef4444;
 }
 
-/* Nav bar color */
+/* Header bar color */
 html.dark .bg-primary-dark {
   background-color: #1e1e1e !important;
+}
+
+html.dark .import-btn,
+html.dark .subscribe-btn {
+  border-color: #413e49 !important;
+  background-color: #2f2c36 !important;
+  color: #f5f5f5;
+}
+
+html.dark .task-dropdown-btn,
+html.dark .add-task-btn {
+  background-color: #5a5170 !important;
 }
 
 html.dark input,
@@ -445,7 +461,6 @@ html.dark .rbc-date-cell.rbc-now {
 /* Secondary button styles */
 html.dark .replay-btn,
 html.dark .cancel-btn,
-html.dark .import-btn,
 html.dark .replay-btn {
   background-color: rgba(39, 39, 39, 0.6);
   color: #e5e7eb;
@@ -455,30 +470,29 @@ html.dark .replay-btn {
 
 html.dark .replay-btn:hover,
 html.dark .cancel-btn:hover,
-html.dark .import-btn:hover,
 html.dark .replay-btn:hover {
   background-color: #292929;
 }
 
 html.dark .breakdown-btn,
-html.dark .dropdown-add-btn {
+html.dark .task-dropdown-add-btn {
   background-color: #9384cfa4;
   transition: background-color 150ms ease;
 }
 
 html.dark .breakdown-btn:hover,
-html.dark .dropdown-add-btn:hover {
+html.dark .task-dropdown-add-btn:hover {
   background-color: #584e80;
 }
 
 html.dark .convert-task-btn,
-html.dark .dropdown-task-add-btn {
+html.dark .task-dropdown-add-task-btn {
   background-color: #ad9ec071;
   transition: background-color 150ms ease;
 }
 
 html.dark .convert-task-btn:hover,
-html.dark .dropdown-task-add-btn:hover {
+html.dark .task-dropdown-add-btn:hover {
   background-color: #675f72;
 }
 
