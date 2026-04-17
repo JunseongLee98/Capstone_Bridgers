@@ -25,6 +25,8 @@ function dedupeCalendarEventsById(events: CalendarEvent[]): CalendarEvent[] {
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [darkMode, setDarkMode] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTask, setNewTask] = useState({
@@ -173,6 +175,18 @@ export default function Home() {
       // ignore storage access errors
     }
   }, []);
+
+  // Load user's saved theme preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('cadence-theme');
+    setDarkMode(savedTheme === 'dark');
+  }, []);
+
+  // Apply theme changes
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem('cadence-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   const startTutorial = () => {
     try {
@@ -924,8 +938,8 @@ export default function Home() {
     <main className="h-screen flex flex-col bg-white">
       {/* Header with dropdowns */}
       <header className="p-4">
-        <div className="bg-primary-dark rounded-lg shadow-lg p-5">
-          <div className="flex items-center justify-between gap-6">
+        <div className={`relative bg-primary-dark shadow-lg p-5 border border-gray-200 transition-all duration-200 ${ mobileMenuOpen ? 'rounded-t-lg rounded-b-none' : 'rounded-lg' }`}>
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="relative h-12 w-[150px]">
                 <Image
@@ -937,8 +951,21 @@ export default function Home() {
                 />
               </div>
             </div>
+
+            {/* Mobile view dropdown hamburger */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen((prev) => !prev);
+                setTasksDropdownOpen(false);
+                setShowSubscriptionDialog(false);
+              }}
+              className="md:hidden flex items-center justify-center p-2.5 rounded-lg bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
             
-            <div className="flex items-center gap-4 relative">
+            <div className="hidden md:flex items-center gap-4 relative">
               {/* ICS File Import & Subscribe */}
               <input
                 ref={fileInputRef}
@@ -952,7 +979,7 @@ export default function Home() {
                 <button
                   onClick={triggerFileInput}
                   disabled={isImportingICS}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-s"
+                  className="import-btn flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:bg-white/16 hover:border-white/40 hover:text-white disabled:opacity-50 text-s"
                   title="Import ICS calendar file"
                 >
                   <Upload size={20} />
@@ -960,7 +987,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setShowSubscriptionDialog(!showSubscriptionDialog)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-s`}
+                  className={`subscribe-btn flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 text-white border border-white/25 hover:bg-white/16 transition-colors hover:border-white/40 hover:text-white ${showSubscriptionDialog ? "bg-white/20 border-white/50 text-white" : ""} disabled:opacity-50 text-s`}
                   title="Subscribe to ICS calendar URL"
                 >
                   <Link2 size={20} />
@@ -1010,7 +1037,7 @@ export default function Home() {
                             type="button"
                             onClick={() => fetchAllICSSubscriptions()}
                             disabled={isLoadingICSSubscription}
-                            className="text-xs px-2 py-1 text-primary-600 hover:bg-primary-50 rounded border border-primary-200 transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 text-primary-600 hover:bg-primary-50/10 rounded transition-colors disabled:opacity-50"
                           >
                             {isLoadingICSSubscription ? 'Refreshing…' : 'Refresh all'}
                           </button>
@@ -1078,7 +1105,7 @@ export default function Home() {
                                 )}
                                 <button
                                   onClick={() => handleRemoveICSSubscription(sub.id)}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  className="p-1 text-red-400 hover:bg-red-50/20 rounded transition-colors"
                                   title="Remove subscription"
                                 >
                                   <Trash2 size={16} />
@@ -1103,7 +1130,7 @@ export default function Home() {
                           setNewSubscriptionUrl('');
                           setNewSubscriptionName('');
                         }}
-                        className="px-4 py-2 bg-neutral text-primary font-normal rounded-lg hover:bg-neutral/80 transition-colors"
+                        className="cancel-btn px-4 py-2 text-primary font-normal rounded-lg border transition-colors"
                       >
                         Cancel
                       </button>
@@ -1118,7 +1145,7 @@ export default function Home() {
                   onClick={() => {
                     setTasksDropdownOpen(!tasksDropdownOpen);
                   }}
-                  className={`flex items-center gap-5 px-5 py-2 rounded-lg bg-primary-light text-white font-semibold text-s border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
+                  className={`task-dropdown-btn flex items-center gap-5 px-5 py-2 rounded-lg bg-primary-light text-white font-semibold text-s border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
                   <Menu size={20} />
                   Tasks
                   {incompleteTasksCount > 0 && (
@@ -1146,7 +1173,7 @@ export default function Home() {
                           <button
                             onClick={triggerTasksFileInput}
                             disabled={isImportingICS}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-neutral font-medium text-gray-700 text-xs rounded-lg hover:bg-secondary-inactive/85 transition-colors disabled:opacity-50"
+                            className="task-dropdown-import-btn flex items-center gap-1.5 px-3.5 py-1.5 font-medium text-gray-700 text-xs rounded-lg border transition-colors disabled:opacity-50"
                             title="Import tasks from ICS file"
                           >
                             <Upload size={14} />
@@ -1157,7 +1184,7 @@ export default function Home() {
                               setTaskDurationMode('preset');
                               setIsAddingTask(!isAddingTask);
                             }}
-                            className="flex items-center gap-2 px-3.5 py-1.5 bg-secondary font-medium text-white text-sm rounded-lg hover:bg-secondary/90 transition-colors"
+                            className="task-dropdown-add-task-btn flex items-center gap-2 px-3.5 py-1.5 border font-medium text-white text-sm rounded-lg transition-colors"
                           >
                             <Plus size={16} />
                             Add Task
@@ -1339,14 +1366,14 @@ export default function Home() {
                             <div className="flex gap-2">
                               <button
                                 type="submit"
-                                className="flex-1 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
+                                className="task-dropdown-add-btn flex-1 px-3 py-1.5 text-white font-normal text-sm rounded-lg"
                               >
                                 Add
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setIsAddingTask(false)}
-                                className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300"
+                                className="cancel-btn px-3 py-1.5 text-primary text-sm rounded-lg border"
                               >
                                 Cancel
                               </button>
@@ -1435,7 +1462,7 @@ export default function Home() {
                   setTempFocusMinutes(focusMinutes);
                   setShowSettingsDialog(true);
                 }}
-                className="ml-1 p-2.5 rounded-full bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
+                className="settings-btn ml-1 p-2.5 rounded-full bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
                 title="Settings"
                 aria-label="Settings"
               >
@@ -1443,13 +1470,84 @@ export default function Home() {
               </button>
             </div>
           </div>
+
+          {/* Mobile dropdown */}
+          <div
+            className={`absolute left-0 top-full w-full md:hidden z-50 origin-top transition-all duration-200 ease-out ${
+              mobileMenuOpen
+                ? 'opacity-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 -translate-y-2 pointer-events-none'
+            }`}
+          >
+            {/* Dropdown panel*/}
+            <div className="flex flex-col gap-2 bg-primary-dark border border-white/20 border-t-0 rounded-b-lg p-3 shadow-xl">
+              
+              <button
+                onClick={() => {
+                  triggerFileInput();
+                  setMobileMenuOpen(false);
+                }}
+                disabled={isImportingICS}
+                className="mobile-menu-btn import-btn w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-white/10 text-white border border-white/25"
+              >
+                <Upload size={18} />
+                {isImportingICS ? 'Importing...' : 'Import ICS'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowSubscriptionDialog(true);
+                  setTasksDropdownOpen(false);
+                  setMobileMenuOpen(false);
+                }}
+                className="mobile-menu-btn subscribe-btn w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-white/10 text-white border border-white/25"
+              >
+                <Link2 size={18} />
+                Subscribe
+              </button>
+
+              <button
+                onClick={() => {
+                  setTasksDropdownOpen(true);
+                  setShowSubscriptionDialog(false);
+                  setMobileMenuOpen(false);
+                }}
+                className="mobile-menu-btn task-dropdown-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-primary-light text-white border border-white/25"
+              >
+                <span className="flex items-center gap-2">
+                  <Menu size={18} />
+                  Tasks
+                </span>
+                {incompleteTasksCount > 0 && (
+                  <span className="bg-white/90 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {incompleteTasksCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setTempWorkHours(workHours);
+                  setTempBreakAfterEvents(breakAfterEvents);
+                  setTempFocusMinutes(focusMinutes);
+                  setShowSettingsDialog(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="mobile-menu-btn settings-btn w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-white/10 text-white border border-white/25"
+              >
+                <Settings size={18} />
+                Settings
+              </button>
+
+            </div>
+          </div>
         </div>
       </header>
 
       {/* Full-width Calendar */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="h-full w-full p-4">
-          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0">
+        <div className="h-full w-full p-4 ">
+          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0 border border-gray-200">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-gray-800">Calendar</h2>
@@ -1462,7 +1560,7 @@ export default function Home() {
                   setTasksDropdownOpen(false);
                   setIsAddingTask(false);
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-light text-white border border-white/25 font-semibold shadow-md hover:bg-primary-light/90 transition-all"
+                className="add-task-btn flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-light text-white border border-white/25 font-semibold shadow-md hover:bg-primary-light/90 transition-all"
                 title="Add a new task"
               >
                 <Plus size={18} />
@@ -1483,7 +1581,7 @@ export default function Home() {
       {/* Add Task Dialog (from calendar) */}
       {showAddTaskDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4 border border-gray-200">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-xl font-bold text-primary">Add Task</h3>
@@ -1629,7 +1727,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowAddTaskDialog(false)}
-                  className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/80 transition-colors"
+                  className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
                 >
                   Cancel
                 </button>
@@ -1729,7 +1827,7 @@ export default function Home() {
                 type="button"
                 onClick={() => handleBreakDownWithAI(selectedEvent)}
                 disabled={isDecomposingEvent}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="breakdown-btn w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isDecomposingEvent ? (
                   <>
@@ -1750,14 +1848,14 @@ export default function Home() {
             <div className="flex gap-3 mt-3">
               <button
                 onClick={() => handleConvertEventToTask(selectedEvent)}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                className="convert-task-btn flex-1 flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg transition-colors"
               >
                 <CheckSquare size={18} />
                 Convert to Task
               </button>
               <button
                 onClick={() => handleDeleteEvent(selectedEvent)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className="delete-btn px-4 py-2 text-white rounded-lg transition-colors"
               >
                 <Trash2 size={18} />
               </button>
@@ -1767,7 +1865,7 @@ export default function Home() {
                   setSelectedEvent(null);
                   setConversionDuration(60);
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
               >
                 Cancel
               </button>
@@ -1779,7 +1877,7 @@ export default function Home() {
       {/* Work Hours Settings Dialog (standalone - kept for any direct links) */}
       {showWorkHoursDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 ">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Set Work Hours</h3>
             <p className="text-sm text-gray-600 mb-4">
               Tasks will only be created and scheduled during these hours (Monday–Friday). You can define multiple work
@@ -1899,7 +1997,7 @@ export default function Home() {
                   setShowWorkHoursDialog(false);
                   setTempWorkHours(workHours);
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
               >
                 Cancel
               </button>
@@ -1911,7 +2009,7 @@ export default function Home() {
       {/* Settings Dialog */}
       {showSettingsDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto border border-gray-200">
             <h3 className="text-xl font-bold text-primary mb-1">Settings</h3>
             <p className="text-sm text-gray-600 mb-6">Configure scheduling and calendar behavior</p>
             
@@ -2050,6 +2148,32 @@ export default function Home() {
                 </select>
               </div>
 
+              {/* Appearance */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800 mb-2">Appearance</h4>
+              <p className="text-xs text-gray-500 mb-2">Toggle between light and dark mode</p>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">
+                  {darkMode ? 'Dark Mode' : 'Light Mode'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`theme-toggle relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    darkMode ? 'active' : ''
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      darkMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
               {/* Tutorial */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-800 mb-2">Tutorial</h4>
@@ -2060,7 +2184,7 @@ export default function Home() {
                     setShowSettingsDialog(false);
                     startTutorial();
                   }}
-                  className="w-full px-4 py-2 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors text-sm font-medium"
+                    className="replay-btn w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
                 >
                   Replay tutorial
                 </button>
@@ -2092,7 +2216,7 @@ export default function Home() {
                   setTempBreakAfterEvents(breakAfterEvents);
                   setTempFocusMinutes(focusMinutes);
                 }}
-                className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/90 transition-colors"
+                className="cancel-btn px-4 py-2 text-primary rounded-lg border transition-colors"
               >
                 Cancel
               </button>

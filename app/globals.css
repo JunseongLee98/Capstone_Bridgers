@@ -18,7 +18,10 @@ body {
     rgb(var(--background-start-rgb));
 }
 
-/* React Big Calendar styles */
+/* ==================================
+   REACT BIG CALENDAR - BASE STYLES
+   ================================== */
+
 .rbc-calendar {
   height: 100%;
   min-height: 0;
@@ -27,12 +30,13 @@ body {
 .rbc-toolbar-label {
   font-size: 32px;
   font-weight: 600;
-  background-color: #F7F6FF; 
+  background-color: #F7F6FF;
 }
 
 .rbc-event {
   border-radius: 4px;
   padding: 2px 5px;
+  background-color: #b9aeca !important;
 }
 
 /* Scheduled task blocks: stay readable above external calendars in overlap columns */
@@ -42,7 +46,7 @@ body {
 }
 
 .rbc-today {
-  background-color: #f0f9ff;
+  background-color: #e6e4ec !important;
 }
 
 /* Make each hour taller in the time grid (tuned size) */
@@ -63,22 +67,504 @@ body {
 
 .rbc-toolbar .rbc-btn-group button {
   background: white;
-  color: #3B3B3B; 
+  color: #3B3B3B;
   border: 1px solid rgba(134, 119, 173, 0.25);
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 14px;
   font-weight: 500;
-  transition: all 150ms ease;
+  transition: all 60ms ease;
 }
 
 .rbc-header {
-  color: #3B3B3B;       
+  color: #3B3B3B;
   font-weight: 600;
 }
 
 .rbc-label {
-  color: #3B3B3B;       
+  color: #3B3B3B;
   font-weight: 400;
 }
 
+.rbc-button-link.rbc-show-more {
+  color: #625d69;
+  background-color: transparent;
+  font-weight: 500;
+  transition: color 150ms ease;
+}
+
+.rbc-button-link.rbc-show-more:hover {
+  color: #40345a;
+}
+
+/* Agenda view row spacing */
+.rbc-agenda-view table.rbc-agenda-table {
+  border-collapse: separate !important;
+  border-spacing: 0 10px !important;
+}
+
+.rbc-agenda-view table.rbc-agenda-table thead th {
+  padding: 10px 14px !important;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody tr {
+  background: transparent !important;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody tr td {
+  padding: 12px 14px !important;
+  line-height: 1.35 !important;
+  vertical-align: top !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* Rounded corners on row edges */
+.rbc-agenda-view table.rbc-agenda-table tbody tr td:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody tr td:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+
+/* Agenda view events*/
+.rbc-agenda-event-cell,
+.rbc-agenda-date-cell,
+.rbc-agenda-time-cell {
+  background-color: #b9aeca !important;
+  color: #111827 !important;
+}
+
+/* Agenda view event gaps */
+.rbc-agenda-view table,
+.rbc-agenda-view table tbody,
+.rbc-agenda-view table tr,
+.rbc-agenda-view table td,
+.rbc-agenda-view table th {
+  border-color: #F7F6FF !important;
+}
+
+/* Calender events */
+.rbc-event-content {
+  font-size: 14px;
+}
+
+.rbc-day-slot .rbc-events-container {
+  margin-right: 0 !important;
+}
+
+/* ==============================
+   CUSTOM BUTTON STYLES
+   ============================== */
+
+.theme-toggle {
+  background-color: #dadada;
+  transition: background-color 150ms ease;
+}
+
+.theme-toggle.active {
+  background-color: #6d5e92; 
+}
+
+/* Secondary button styles */
+.replay-btn,
+.cancel-btn {
+  background-color: #eae9ee71;
+  color: #383838;
+  border-color: #d8d8d8;
+  transition: all 150ms ease;
+}
+
+.replay-btn:hover,
+.cancel-btn:hover {
+  background-color: #eaeaec;
+}
+
+.breakdown-btn,
+.dropdown-add-btn {
+  background-color: #695A8D;
+  transition: background-color 150ms ease;
+}
+
+.breakdown-btn:hover,
+.dropdown-add-btn:hover {
+  background-color: #5b4985;
+}
+
+.task-dropdown-add-task-btn {
+  background-color: #5f5488d2 !important;
+  border-color: #827a94;
+  transition: background-color 150ms ease;
+}
+
+.task-dropdown-add-task-btn:hover {
+  background-color: #5f5485 !important;
+}
+
+.convert-task-btn {
+  background-color: #827a94 !important;
+  border-color: #968dac;
+  transition: background-color 150ms ease;
+}
+
+.convert-task-btn:hover {
+  background-color: #756a85 !important;
+}
+
+.task-dropdown-import-btn {
+  border-color: rgb(131, 131, 139) !important;
+  background-color: #8b849e !important;
+  color: #f5f5f5;
+  transition: background-color 150ms ease;
+}
+
+.task-dropdown-import-btn:hover {
+  background-color: rgb(129, 117, 148) !important;
+}
+
+.delete-btn {
+  background-color: #a16d6d;
+}
+
+.delete-btn:hover {
+  background-color: rgba(146, 61, 61, 0.897)
+}
+
+/* Add work segment text*/
+.text-primary-600 {
+  color: #6b50aa !important;
+}
+
+/* =============================
+   DARK MODE - BASE STYLES
+   ============================= */
+
+html.dark body {
+  background-color: #121212;
+  color: #f5f5f5;
+}
+
+html.dark .bg-background {
+  background-color: #1e1e1e !important;
+}
+
+html.dark .bg-white {
+  background-color: #121212 !important;
+}
+
+html.dark .bg-gray-50 {
+  background-color: #181818 !important;
+}
+
+html.dark .bg-gray-100 {
+  background-color: #2a2a2a !important;
+}
+
+html.dark .bg-gray-200 {
+  background-color: #292929 !important;
+}
+
+/* Add work segment text style*/
+html.dark .text-primary-600 {
+  color: #7e67b3 !important;
+}
+
+/* Basic text colors*/
+html.dark .text-black {
+  color: #f5f5f5 !important;
+}
+
+html.dark .text-gray-900 {
+  color: #ffffff !important;
+}
+
+html.dark .text-gray-800 {
+  color: #f5f5f5 !important;
+}
+
+html.dark .text-gray-700 {
+  color: #e5e7eb !important;
+}
+
+html.dark .text-gray-600 {
+  color: #d1d5db !important;
+}
+
+html.dark .text-gray-500 {
+  color: #9ca3af !important;
+}
+
+html.dark .text-gray-400 {
+  color: #9ca3af !important;
+}
+
+html.dark .border-gray-200 {
+  border-color: #242424 !important;
+}
+
+html.dark .border-gray-300 {
+  border-color: #3a3a3a !important;
+}
+
+html.dark .hover\:bg-gray-50:hover {
+  background-color: #2a2a2a !important;
+}
+
+html.dark .hover\:bg-gray-100:hover {
+  background-color: #333333 !important;
+}
+
+html.dark .hover\:bg-gray-300:hover {
+  background-color: #444444 !important;
+}
+
+.rbc-date-cell.rbc-now {
+  background-color: #e6e4ec;
+}
+
+/* ==============================
+   DARK MODE - CALENDAR
+   ============================== */
+
+html.dark .rbc-calendar {
+  background-color: #1e1e1e;
+  color: #f5f5f5;
+}
+
+html.dark .rbc-time-view,
+html.dark .rbc-month-view,
+html.dark .rbc-agenda-view,
+html.dark .rbc-toolbar,
+html.dark .rbc-toolbar-label,
+html.dark .rbc-time-content > * {
+  background-color: #1e1e1e;
+}
+
+html.dark .rbc-time-view,
+html.dark .rbc-month-view,
+html.dark .rbc-agenda-view {
+  border-radius: 8px;
+}
+
+html.dark .rbc-toolbar-label {
+  color: #f5f5f5;
+}
+
+/* Date buttons */
+html.dark .rbc-toolbar .rbc-btn-group button {
+  background: #74708a;
+  color: #f5f5f5;
+  border: 1px solid rgb(141, 139, 167);
+}
+
+/* Active buttons */
+html.dark .rbc-toolbar .rbc-btn-group button.rbc-active {
+  background-color: #68657c;
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .rbc-toolbar .rbc-btn-group button:hover:not(.rbc-active) {
+  background: #4c455e;
+}
+
+/* Calendar text */
+html.dark .rbc-header {
+  color: #e5e7eb;
+}
+
+html.dark .rbc-label {
+  color: #d1d5db;
+}
+
+/* Grid lines */
+html.dark .rbc-time-header,
+html.dark .rbc-time-content,
+html.dark .rbc-time-gutter,
+html.dark .rbc-timeslot-group,
+html.dark .rbc-day-slot,
+html.dark .rbc-month-row,
+html.dark .rbc-date-cell,
+html.dark .rbc-time-slot {
+  border-color: #2c2c2c;
+}
+
+html.dark .rbc-time-view {
+  border: none;
+}
+
+html.dark .rbc-month-view,
+html.dark .rbc-month-row {
+  border: none;
+}
+
+/* Current day highlight */
+html.dark .rbc-today {
+  background-color: #403e4dd0 !important;
+}
+
+/* Inactive days */
+html.dark .rbc-off-range-bg {
+  background-color: #181818;
+}
+
+html.dark .rbc-off-range {
+  color: #6b7280;
+}
+
+/* Events */
+html.dark .rbc-event {
+  background-color: #5e557e !important;
+  color: #ffffff !important;
+}
+
+/* Agenda view event styles*/
+html.dark .rbc-agenda-event-cell,
+html.dark .rbc-agenda-date-cell,
+html.dark .rbc-agenda-time-cell {
+  background-color: #605680 !important;
+  color: #ffffff !important;
+}
+
+/* Agenda view event gaps */
+html.dark .rbc-agenda-view table,
+html.dark .rbc-agenda-view table tbody,
+html.dark .rbc-agenda-view table tr,
+html.dark .rbc-agenda-view table td,
+html.dark .rbc-agenda-view table th {
+  border-color: #2c2c2c !important;
+}
+
+html.dark .rbc-selected {
+  outline: 2px solid #76689A;
+}
+
+html.dark .rbc-current-time-indicator {
+  background-color: #ef4444;
+}
+
+/* Header bar color */
+html.dark .bg-primary-dark {
+  background-color: #1e1e1e !important;
+}
+
+html.dark .import-btn,
+html.dark .task-dropdown-import-btn,
+html.dark .subscribe-btn {
+  border-color: rgb(97, 93, 109) !important;
+  background-color: #45425a !important;
+  color: #f5f5f5;
+}
+
+html.dark .task-dropdown-btn,
+html.dark .add-task-btn {
+  background-color: #5f5488 !important;
+  border-color: #80749c;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: #1e1e1e !important;
+  color: #f5f5f5 !important;
+  border-color: #3a3a3a !important;
+}
+
+/* All calendar grid lines */
+html.dark .rbc-month-view,
+html.dark .rbc-month-row,
+html.dark .rbc-date-cell,
+html.dark .rbc-day-bg,
+html.dark .rbc-row-bg,
+html.dark .rbc-header,
+html.dark .rbc-time-header,
+html.dark .rbc-time-header-content,
+html.dark .rbc-time-header-gutter {
+  border-color: #2c2c2c !important;
+}
+
+/* Vertical calendar grid lines */
+html.dark .rbc-time-content > * + * > *,
+html.dark .rbc-day-slot,
+html.dark .rbc-time-header > .rbc-row > * + * {
+  border-left: 1px solid #2c2c2c !important;
+}
+
+/* Horizontal calendar grid lines */
+html.dark .rbc-day-slot .rbc-time-slot,
+html.dark .rbc-timeslot-group,
+html.dark .rbc-month-row + .rbc-month-row,
+html.dark .rbc-time-header,
+html.dark .rbc-time-header-content {
+  border-top: 1px solid #2c2c2c !important;
+}
+
+/* Show more text on month view */
+html.dark .rbc-button-link.rbc-show-more {
+  color: #c5bcda;
+  background-color: transparent;
+  font-weight: 500;
+  transition: color 150ms ease;
+}
+
+html.dark .rbc-button-link.rbc-show-more:hover {
+  color: #8b7eac;
+}
+
+html.dark .rbc-date-cell.rbc-now {
+  background-color: #3c3847;
+}
+
+/* ====================================
+   DARK MODE - CUSTOM CLASS BUTTONS
+   ==================================== */
+
+/* Secondary button styles */
+html.dark .replay-btn,
+html.dark .cancel-btn,
+html.dark .replay-btn {
+  background-color: rgba(39, 39, 39, 0.6);
+  color: #e5e7eb;
+  border-color: #3a3a3a;
+  transition: all 150ms ease;
+}
+
+html.dark .replay-btn:hover,
+html.dark .cancel-btn:hover,
+html.dark .replay-btn:hover {
+  background-color: #292929;
+}
+
+html.dark .breakdown-btn,
+html.dark .task-dropdown-add-btn {
+  background-color: #9384cfa4;
+  transition: background-color 150ms ease;
+}
+
+html.dark .breakdown-btn:hover,
+html.dark .task-dropdown-add-btn:hover {
+  background-color: #584e80;
+}
+
+html.dark .convert-task-btn,
+html.dark .task-dropdown-add-task-btn {
+  background-color: #ad9ec071;
+  transition: background-color 150ms ease;
+  border-color: #797783;
+}
+
+html.dark .convert-task-btn:hover,
+html.dark .task-dropdown-add-btn:hover {
+  background-color: #675f72;
+}
+
+html.dark .delete-btn {
+  background-color: #945c5c;
+}
+
+html.dark .delete-btn:hover {
+  background-color: #7a4444;
+}
