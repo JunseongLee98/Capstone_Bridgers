@@ -26,6 +26,7 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [darkMode, setDarkMode] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTask, setNewTask] = useState({
@@ -937,8 +938,8 @@ export default function Home() {
     <main className="h-screen flex flex-col bg-white">
       {/* Header with dropdowns */}
       <header className="p-4">
-        <div className="bg-primary-dark rounded-lg shadow-lg p-5 border border-gray-200">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className={`relative bg-primary-dark shadow-lg p-5 border border-gray-200 transition-all duration-200 ${ mobileMenuOpen ? 'rounded-t-lg rounded-b-none' : 'rounded-lg' }`}>
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="relative h-12 w-[150px]">
                 <Image
@@ -950,8 +951,21 @@ export default function Home() {
                 />
               </div>
             </div>
+
+            {/* Mobile view dropdown hamburger */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen((prev) => !prev);
+                setTasksDropdownOpen(false);
+                setShowSubscriptionDialog(false);
+              }}
+              className="md:hidden flex items-center justify-center p-2.5 rounded-lg bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
             
-            <div className="flex items-center gap-4 relative">
+            <div className="hidden md:flex items-center gap-4 relative">
               {/* ICS File Import & Subscribe */}
               <input
                 ref={fileInputRef}
@@ -1454,6 +1468,77 @@ export default function Home() {
               >
                 <Settings size={20} />
               </button>
+            </div>
+          </div>
+
+          {/* Mobile dropdown */}
+          <div
+            className={`absolute left-0 top-full w-full md:hidden z-50 origin-top transition-all duration-200 ease-out ${
+              mobileMenuOpen
+                ? 'opacity-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 -translate-y-2 pointer-events-none'
+            }`}
+          >
+            {/* Dropdown panel*/}
+            <div className="flex flex-col gap-2 bg-primary-dark border border-white/20 border-t-0 rounded-b-lg p-3 shadow-xl">
+              
+              <button
+                onClick={() => {
+                  triggerFileInput();
+                  setMobileMenuOpen(false);
+                }}
+                disabled={isImportingICS}
+                className="mobile-menu-btn import-btn w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-white/10 text-white border border-white/25"
+              >
+                <Upload size={18} />
+                {isImportingICS ? 'Importing...' : 'Import ICS'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowSubscriptionDialog(true);
+                  setTasksDropdownOpen(false);
+                  setMobileMenuOpen(false);
+                }}
+                className="mobile-menu-btn subscribe-btn w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-white/10 text-white border border-white/25"
+              >
+                <Link2 size={18} />
+                Subscribe
+              </button>
+
+              <button
+                onClick={() => {
+                  setTasksDropdownOpen(true);
+                  setShowSubscriptionDialog(false);
+                  setMobileMenuOpen(false);
+                }}
+                className="mobile-menu-btn task-dropdown-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-primary-light text-white border border-white/25"
+              >
+                <span className="flex items-center gap-2">
+                  <Menu size={18} />
+                  Tasks
+                </span>
+                {incompleteTasksCount > 0 && (
+                  <span className="bg-white/90 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {incompleteTasksCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setTempWorkHours(workHours);
+                  setTempBreakAfterEvents(breakAfterEvents);
+                  setTempFocusMinutes(focusMinutes);
+                  setShowSettingsDialog(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="mobile-menu-btn settings-btn w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-white/10 text-white border border-white/25"
+              >
+                <Settings size={18} />
+                Settings
+              </button>
+
             </div>
           </div>
         </div>
