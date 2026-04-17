@@ -1173,7 +1173,7 @@ export default function Home() {
                           <button
                             onClick={triggerTasksFileInput}
                             disabled={isImportingICS}
-                            className="import-btn flex items-center gap-1.5 px-3.5 py-1.5 font-medium text-gray-700 text-xs rounded-lg border transition-colors disabled:opacity-50"
+                            className="task-dropdown-import-btn flex items-center gap-1.5 px-3.5 py-1.5 font-medium text-gray-700 text-xs rounded-lg border transition-colors disabled:opacity-50"
                             title="Import tasks from ICS file"
                           >
                             <Upload size={14} />
@@ -1184,7 +1184,7 @@ export default function Home() {
                               setTaskDurationMode('preset');
                               setIsAddingTask(!isAddingTask);
                             }}
-                            className="task-dropdown-add-task-btn flex items-center gap-2 px-3.5 py-1.5 font-medium text-white text-sm rounded-lg transition-colors"
+                            className="task-dropdown-add-task-btn flex items-center gap-2 px-3.5 py-1.5 border font-medium text-white text-sm rounded-lg transition-colors"
                           >
                             <Plus size={16} />
                             Add Task
