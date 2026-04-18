@@ -36,7 +36,6 @@ body {
 .rbc-event {
   border-radius: 4px;
   padding: 2px 5px;
-  background-color: #b9aeca !important;
 }
 
 /* Scheduled task blocks: stay readable above external calendars in overlap columns */
@@ -107,10 +106,6 @@ body {
   padding: 10px 14px !important;
 }
 
-.rbc-agenda-view table.rbc-agenda-table tbody tr {
-  background: transparent !important;
-}
-
 .rbc-agenda-view table.rbc-agenda-table tbody tr td {
   padding: 12px 14px !important;
   line-height: 1.35 !important;
@@ -131,13 +126,6 @@ body {
 }
 
 
-/* Agenda view events*/
-.rbc-agenda-event-cell,
-.rbc-agenda-date-cell,
-.rbc-agenda-time-cell {
-  background-color: #b9aeca !important;
-  color: #111827 !important;
-}
 
 /* Agenda view event gaps */
 .rbc-agenda-view table,
@@ -186,7 +174,7 @@ body {
 
 .breakdown-btn,
 .dropdown-add-btn {
-  background-color: #695A8D;
+  background-color: #7969a0;
   transition: background-color 150ms ease;
 }
 
@@ -206,13 +194,13 @@ body {
 }
 
 .convert-task-btn {
-  background-color: #827a94 !important;
-  border-color: #968dac;
+  background-color: #9491b1 !important;
+  border-color: #8a8596;
   transition: background-color 150ms ease;
 }
 
 .convert-task-btn:hover {
-  background-color: #756a85 !important;
+  background-color: #757397 !important;
 }
 
 .task-dropdown-import-btn {
@@ -227,7 +215,7 @@ body {
 }
 
 .delete-btn {
-  background-color: #a16d6d;
+  background-color: #a75959;
 }
 
 .delete-btn:hover {
@@ -415,20 +403,6 @@ html.dark .rbc-off-range {
   color: #6b7280;
 }
 
-/* Events */
-html.dark .rbc-event {
-  background-color: #5e557e !important;
-  color: #ffffff !important;
-}
-
-/* Agenda view event styles*/
-html.dark .rbc-agenda-event-cell,
-html.dark .rbc-agenda-date-cell,
-html.dark .rbc-agenda-time-cell {
-  background-color: #605680 !important;
-  color: #ffffff !important;
-}
-
 /* Agenda view event gaps */
 html.dark .rbc-agenda-view table,
 html.dark .rbc-agenda-view table tbody,
@@ -525,8 +499,9 @@ html.dark .rbc-date-cell.rbc-now {
 /* Secondary button styles */
 html.dark .replay-btn,
 html.dark .cancel-btn,
-html.dark .replay-btn {
-  background-color: rgba(39, 39, 39, 0.6);
+html.dark .replay-btn,
+html.dark .skip-btn {
+  background-color: rgb(32, 32, 32);
   color: #e5e7eb;
   border-color: #3a3a3a;
   transition: all 150ms ease;
@@ -534,7 +509,8 @@ html.dark .replay-btn {
 
 html.dark .replay-btn:hover,
 html.dark .cancel-btn:hover,
-html.dark .replay-btn:hover {
+html.dark .replay-btn:hover,
+html.dark .skip-btn:hover {
   background-color: #292929;
 }
 
