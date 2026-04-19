@@ -2324,7 +2324,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={completeTutorial}
-                className="px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/90 transition-colors"
+                className="skip-btn px-4 py-2 bg-neutral text-gray-700 rounded-lg hover:bg-neutral/90 transition-colors"
               >
                 Skip
               </button>
