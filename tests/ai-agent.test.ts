@@ -483,6 +483,42 @@ describe('CalendarAIAgent.distributeTasks', () => {
     expect(Math.max(...step1Ends)).toBeLessThanOrEqual(Math.min(...step2Starts));
   });
 
+  it('schedules later AI plan steps after an earlier step had partial chunk failure', () => {
+    vi.setSystemTime(new Date(2026, 3, 13, 9, 0, 0, 0));
+    const start = new Date(2026, 3, 13, 0, 0, 0, 0);
+    const end = new Date(2026, 3, 27, 0, 0, 0, 0);
+    const due = new Date(2026, 3, 25, 0, 0, 0, 0);
+    // Step 1 splits into two chunks; step 2 is one chunk. Older logic skipped step 2 if chunk 2 of step 1 placed nothing.
+    const s1 = baseTask({
+      id: 'partial-1',
+      title: 'Partial step 1',
+      estimatedDuration: 70,
+      actualDurations: [],
+      dueDate: due,
+      planStepOrder: 1,
+    });
+    const s2 = baseTask({
+      id: 'partial-2',
+      title: 'Step 2 after partial',
+      estimatedDuration: 30,
+      actualDurations: [],
+      dueDate: due,
+      planStepOrder: 2,
+    });
+    const events = CalendarAIAgent.distributeTasks(
+      [s2, s1],
+      [],
+      start,
+      end,
+      [{ startHour: 9, endHour: 18 }],
+      0,
+      50
+    );
+    const ids = new Set(events.map((e) => e.taskId).filter(Boolean));
+    expect(ids.has('partial-1')).toBe(true);
+    expect(ids.has('partial-2')).toBe(true);
+  });
+
   it('respects due date cap', () => {
     vi.setSystemTime(new Date(2026, 3, 13, 9, 0, 0, 0));
     const start = new Date(2026, 3, 13, 0, 0, 0, 0);

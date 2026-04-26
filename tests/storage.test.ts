@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { storage } from '@/lib/storage';
+import type { InAppNotification } from '@/types';
 
 describe('storage (browser API mocked)', () => {
   const lsStore: Record<string, string> = {};
@@ -79,5 +80,27 @@ describe('storage (browser API mocked)', () => {
     expect(storage.getBreakAfterEvents()).toBe(5);
     storage.saveBreakAfterEvents(15);
     expect(storage.getBreakAfterEvents()).toBe(15);
+  });
+
+  it('round-trips notifications and marks read', () => {
+    const notifs: InAppNotification[] = [
+      {
+        id: 'n1',
+        kind: 'cadence_subtask_scheduled',
+        title: 'Scheduled: Essay outline',
+        body: 'Mon 10:00–10:50',
+        createdAt: new Date('2026-02-01T12:00:00.000Z'),
+        eventId: 'scheduled-t1-1',
+        taskId: 't1',
+      },
+    ];
+    storage.saveNotifications(notifs);
+    const loaded = storage.getNotifications();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].title).toBe('Scheduled: Essay outline');
+    expect(loaded[0].createdAt instanceof Date).toBe(true);
+
+    const updated = storage.markNotificationRead('n1');
+    expect(updated[0].readAt instanceof Date).toBe(true);
   });
 });

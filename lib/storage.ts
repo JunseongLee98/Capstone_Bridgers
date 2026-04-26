@@ -1,4 +1,4 @@
-import { Task, CalendarEvent, WorkHoursConfig, WorkSegment } from '@/types';
+import { Task, CalendarEvent, WorkHoursConfig, WorkSegment, InAppNotification } from '@/types';
 
 const TASKS_KEY = 'cadence_tasks';
 const EVENTS_KEY = 'cadence_events';
@@ -8,6 +8,7 @@ const ICS_SUBSCRIPTIONS_KEY = 'cadence_ics_subscriptions';
 const WORK_HOURS_KEY = 'cadence_work_hours';
 const BREAK_AFTER_EVENTS_KEY = 'cadence_break_after_events';
 const FOCUS_MINUTES_KEY = 'cadence_focus_minutes';
+const NOTIFICATIONS_KEY = 'cadence_notifications';
 
 // Default pastel color palette for subscribed ICS calendars (easy on the eyes)
 const ICS_SUBSCRIPTION_COLORS = [
@@ -59,6 +60,65 @@ export const storage = {
   saveEvents(events: CalendarEvent[]): void {
     if (typeof window === 'undefined') return;
     localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+  },
+
+  // Notifications (in-app)
+  getNotifications(): InAppNotification[] {
+    if (typeof window === 'undefined') return [];
+    const data = localStorage.getItem(NOTIFICATIONS_KEY);
+    if (!data) return [];
+
+    const notifs = JSON.parse(data) as any[];
+    if (!Array.isArray(notifs)) return [];
+    return notifs
+      .map((n: any): InAppNotification => ({
+        ...n,
+        createdAt: new Date(n.createdAt),
+        readAt: n.readAt ? new Date(n.readAt) : undefined,
+      }))
+      .filter((n: InAppNotification) => Boolean(n.id) && Boolean(n.kind) && Boolean(n.createdAt));
+  },
+
+  saveNotifications(notifications: InAppNotification[]): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications));
+  },
+
+  addNotifications(next: InAppNotification[]): InAppNotification[] {
+    const existing = this.getNotifications();
+    const seen = new Set(existing.map((n) => n.id));
+    const merged = [...existing];
+    for (const n of next) {
+      if (!n?.id) continue;
+      if (seen.has(n.id)) continue;
+      merged.push(n);
+      seen.add(n.id);
+    }
+    // Newest first for UI
+    merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    this.saveNotifications(merged);
+    return merged;
+  },
+
+  markNotificationRead(id: string): InAppNotification[] {
+    const existing = this.getNotifications();
+    const now = new Date();
+    const updated = existing.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? now } : n));
+    this.saveNotifications(updated);
+    return updated;
+  },
+
+  markAllNotificationsRead(): InAppNotification[] {
+    const existing = this.getNotifications();
+    const now = new Date();
+    const updated = existing.map((n) => ({ ...n, readAt: n.readAt ?? now }));
+    this.saveNotifications(updated);
+    return updated;
+  },
+
+  clearNotifications(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(NOTIFICATIONS_KEY);
   },
 
   // Google Calendar Tokens

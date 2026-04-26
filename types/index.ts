@@ -24,6 +24,21 @@ export interface CalendarEvent {
   color?: string;
 }
 
+export type InAppNotificationKind = 'cadence_subtask_scheduled';
+
+export interface InAppNotification {
+  id: string;
+  kind: InAppNotificationKind;
+  title: string;
+  body?: string;
+  createdAt: Date;
+  readAt?: Date;
+  /** Calendar event id created by Cadence (local). */
+  eventId?: string;
+  /** Related task/subtask id, when available. */
+  taskId?: string;
+}
+
 export interface TimeSlot {
   start: Date;
   end: Date;

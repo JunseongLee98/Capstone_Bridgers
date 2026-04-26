@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Task, CalendarEvent } from '@/types';
+import { Task, CalendarEvent, InAppNotification } from '@/types';
 import { storage } from '@/lib/storage';
 import { CalendarAIAgent } from '@/lib/ai-agent';
 import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
 import { formatDateToLocalISO, parseLocalDateInput } from '@/lib/date-utils';
 import Calendar from '@/components/Calendar';
+import NotificationsBell from '@/components/NotificationsBell';
 import { v4 as uuidv4 } from 'uuid';
 import Image from 'next/image';
 import { Plus, X, Clock, CheckCircle2, ChevronDown, Menu, Calendar as CalendarIcon, Upload, Link2, Trash2, CheckSquare, Settings, Sparkles } from 'lucide-react';
@@ -25,6 +26,8 @@ function dedupeCalendarEventsById(events: CalendarEvent[]): CalendarEvent[] {
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
@@ -79,6 +82,7 @@ export default function Home() {
 
   const tasksDropdownRef = useRef<HTMLDivElement>(null);
   const subscriptionColorMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tasksFileInputRef = useRef<HTMLInputElement>(null);
   
@@ -113,6 +117,7 @@ export default function Home() {
     const savedEvents = storage.getEvents();
     setTasks(savedTasks);
     setEvents(savedEvents);
+    setNotifications(storage.getNotifications());
 
     // Load work hours
     const savedWorkHours = storage.getWorkHours();
@@ -527,6 +532,10 @@ export default function Home() {
     storage.saveEvents(events);
   }, [events]);
 
+  useEffect(() => {
+    storage.saveNotifications(notifications);
+  }, [notifications]);
+
   // Merge all events for display. Cadence (local) events must come **last** so react-big-calendar
   // paints them above Google/ICS when times overlap; otherwise task blocks sit underneath and look missing.
   const allEvents = useMemo(() => {
@@ -539,6 +548,9 @@ export default function Home() {
     const handleClickOutside = (event: MouseEvent) => {
       if (tasksDropdownRef.current && !tasksDropdownRef.current.contains(event.target as Node)) {
         setTasksDropdownOpen(false);
+      }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
       }
     };
 
@@ -557,6 +569,36 @@ export default function Home() {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [openColorMenuId]);
+
+  const enqueueCadenceNotificationsForEvents = (scheduled: CalendarEvent[]) => {
+    // Only notify for events created by Cadence itself: scheduled task blocks with a taskId.
+    const cadenceEvents = scheduled.filter((e) => Boolean(e.taskId));
+    if (cadenceEvents.length === 0) return;
+
+    const createdAt = new Date();
+    const next: InAppNotification[] = cadenceEvents.map((e) => ({
+      id: `notif:${e.id}`,
+      kind: 'cadence_subtask_scheduled',
+      title: `Scheduled: ${e.title}`,
+      body: `${e.start.toLocaleString()} → ${e.end.toLocaleString()}`,
+      createdAt,
+      eventId: e.id,
+      taskId: e.taskId,
+    }));
+
+    setNotifications((prev) => {
+      const seen = new Set(prev.map((n) => n.id));
+      const merged = [...prev];
+      for (const n of next) {
+        if (!seen.has(n.id)) {
+          merged.push(n);
+          seen.add(n.id);
+        }
+      }
+      merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return merged;
+    });
+  };
 
   const handleAddTask = async (taskData: {
     title: string;
@@ -632,6 +674,7 @@ export default function Home() {
       );
 
       if (scheduledEvents.length > 0) {
+        enqueueCadenceNotificationsForEvents(scheduledEvents);
         // Add the scheduled event to the events state
         return [...prevEvents, ...scheduledEvents];
       }
@@ -687,6 +730,7 @@ export default function Home() {
       );
 
       if (scheduledEvents.length > 0) {
+        enqueueCadenceNotificationsForEvents(scheduledEvents);
         return [...currentEvents, ...scheduledEvents];
       }
       
@@ -840,7 +884,8 @@ export default function Home() {
       const ordered = [...subtasks].sort(
         (a: { order: number }, b: { order: number }) => a.order - b.order
       );
-      const dueDay = event.start ? parseLocalDateInput(formatDateToLocalISO(event.start)) : undefined;
+      // Do not set dueDate on breakdown steps: using the assignment due date caps every step to
+      // that single calendar day, so most chunks never get slots and only a few blocks appear.
       const newTasks: Task[] = ordered.map(
         (st: { title: string; description?: string; estimatedMinutes?: number; order: number }) => ({
           id: uuidv4(),
@@ -849,7 +894,6 @@ export default function Home() {
           estimatedDuration: st.estimatedMinutes ?? 60,
           priority: 'medium',
           category: '',
-          dueDate: dueDay,
           planStepOrder: st.order,
           createdAt: new Date(),
           actualDurations: [],
@@ -882,6 +926,7 @@ export default function Home() {
       );
 
       setTasks(prev => [...prev, ...newTasks]);
+      enqueueCadenceNotificationsForEvents(scheduledEvents);
       setEvents(prev => [...prev, ...scheduledEvents]);
 
       setShowEventDialog(false);
@@ -1452,6 +1497,30 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div ref={notificationsRef}>
+                <NotificationsBell
+                  notifications={notifications}
+                  open={notificationsOpen}
+                  onToggle={() => setNotificationsOpen((v) => !v)}
+                  onMarkRead={(id) => {
+                    const now = new Date();
+                    setNotifications((prev) =>
+                      prev.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? now } : n))
+                    );
+                  }}
+                  onMarkAllRead={() => {
+                    const now = new Date();
+                    setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? now })));
+                  }}
+                  onClearAll={() => {
+                    if (!confirm('Clear all notifications?')) return;
+                    storage.clearNotifications();
+                    setNotifications([]);
+                    setNotificationsOpen(false);
+                  }}
+                />
               </div>
 
               {/* Settings (rightmost icon-only) */}

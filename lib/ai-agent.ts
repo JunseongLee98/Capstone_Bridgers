@@ -10,7 +10,9 @@ import { SCHEDULE_MAX_HORIZON_DAYS } from '@/lib/schedule-constants';
  *   (b) preferring days with lower load for that task, and (c) enforcing a per-day cap derived
  *   from totalMinutes / weekdayCount (relaxed only when nothing fits).
  * - AI breakdown steps (planStepOrder): scheduled strictly step-by-step in order; later steps
- *   never occur before earlier steps. If a step cannot be placed at all, remaining steps are skipped.
+ *   never occur before earlier steps. Placement prefers the calendar week of `startDate` and
+ *   spreads load across weekdays before spilling to the next week. If a step cannot be placed
+ *   at all, remaining steps are skipped.
  */
 export class CalendarAIAgent {
   /** Heuristic: treat these as non-blocking all-day placeholders (Canvas due dates, holidays, etc). */
@@ -346,6 +348,15 @@ export class CalendarAIAgent {
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   }
 
+  /** Week starts Sunday 00:00 local (default react-big-calendar week). */
+  private static startOfSundayWeek(day: Date): Date {
+    const x = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const dow = x.getDay();
+    x.setDate(x.getDate() - dow);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
+
   /** Local calendar weekdays from `a` through `b` (date parts only, inclusive). */
   private static listWeekdayKeysBetweenInclusive(a: Date, b: Date): string[] {
     const out: string[] = [];
@@ -472,6 +483,12 @@ export class CalendarAIAgent {
       futureSlots.sort((a, b) => a.start.getTime() - b.start.getTime())
     );
 
+    const planDayMid = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const planAnchorWeekStart = this.startOfSundayWeek(planDayMid);
+    const planAnchorWeekEndEx = new Date(planAnchorWeekStart);
+    planAnchorWeekEndEx.setDate(planAnchorWeekEndEx.getDate() + 7);
+    const planWeekLoads = new Map<string, number>();
+
     const scheduledEvents: CalendarEvent[] = [];
     let scheduleIdSeq = 0;
     const nextId = (taskId: string, partIndex: number, slotIdx: number, tag: string) =>
@@ -483,7 +500,8 @@ export class CalendarAIAgent {
     const maxPerDayByTask = new Map<string, number>();
     let globalCursor = new Date(now.getTime());
     let prevPlanTaskId: string | null = null;
-    let prevPlanTaskPlacedSomething = false;
+    /** Plan-step tasks that received at least one scheduled block (any chunk). */
+    const planTasksWithScheduledTime = new Set<string>();
     let skipRemainingPlanSteps = false;
 
     const getDayLoads = (taskId: string): Map<string, number> => {
@@ -500,22 +518,22 @@ export class CalendarAIAgent {
       const displayTitle =
         totalParts > 1 ? `${task.title} (Part ${partIndex + 1}/${totalParts})` : task.title;
 
-      // AI breakdown steps must remain sequential across steps.
+      // AI breakdown steps must remain sequential across *steps* (tasks), not individual focus chunks.
+      // Only skip later steps if the *previous* step had zero scheduled time in total — not because
+      // one middle chunk failed while other chunks for the same step already placed.
       if (usesPlanOrder) {
         if (skipRemainingPlanSteps) {
           continue;
         }
         if (prevPlanTaskId !== null && prevPlanTaskId !== task.id) {
-          if (!prevPlanTaskPlacedSomething) {
+          if (!planTasksWithScheduledTime.has(prevPlanTaskId)) {
             skipRemainingPlanSteps = true;
             continue;
           }
-          prevPlanTaskPlacedSomething = false;
         }
         prevPlanTaskId = task.id;
       } else {
         prevPlanTaskId = null;
-        prevPlanTaskPlacedSomething = false;
         skipRemainingPlanSteps = false;
       }
 
@@ -625,23 +643,39 @@ export class CalendarAIAgent {
           }
         }
 
-        const pool = cands.length > 0 ? cands : candsRelaxed;
+        let pool = cands.length > 0 ? cands : candsRelaxed;
         if (pool.length === 0) {
           break;
         }
 
-        pool.sort((a, b) => {
-          if (usesPlanOrder) {
+        if (usesPlanOrder) {
+          const inAnchorWeek = pool.filter(
+            (c) =>
+              c.start.getTime() >= planAnchorWeekStart.getTime() &&
+              c.start.getTime() < planAnchorWeekEndEx.getTime()
+          );
+          if (inAnchorWeek.length > 0) {
+            pool = inAnchorWeek;
+          }
+          pool.sort((a, b) => {
+            const wa = planWeekLoads.get(a.dayKey) ?? 0;
+            const wb = planWeekLoads.get(b.dayKey) ?? 0;
+            if (wa !== wb) {
+              return wa - wb;
+            }
             return a.start.getTime() - b.start.getTime();
-          }
-          if (a.load !== b.load) {
-            return a.load - b.load;
-          }
-          if (a.onPref !== b.onPref) {
-            return a.onPref ? -1 : 1;
-          }
-          return a.start.getTime() - b.start.getTime();
-        });
+          });
+        } else {
+          pool.sort((a, b) => {
+            if (a.load !== b.load) {
+              return a.load - b.load;
+            }
+            if (a.onPref !== b.onPref) {
+              return a.onPref ? -1 : 1;
+            }
+            return a.start.getTime() - b.start.getTime();
+          });
+        }
 
         const best = pool[0];
         rrByTask.set(task.id, (rrByTask.get(task.id) ?? 0) + 1);
@@ -661,6 +695,10 @@ export class CalendarAIAgent {
         dayLoads.set(best.dayKey, (dayLoads.get(best.dayKey) ?? 0) + best.use);
         remaining -= best.use;
         placedAnyThisChunk = true;
+        if (usesPlanOrder) {
+          planTasksWithScheduledTime.add(task.id);
+          planWeekLoads.set(best.dayKey, (planWeekLoads.get(best.dayKey) ?? 0) + best.use);
+        }
 
         const slotAfterBreak = new Date(
           best.end.getTime() + breakAfterEventsMinutes * 60 * 1000
@@ -687,13 +725,6 @@ export class CalendarAIAgent {
         }
       }
 
-      if (usesPlanOrder && placedAnyThisChunk) {
-        prevPlanTaskPlacedSomething = true;
-      }
-      if (usesPlanOrder && !placedAnyThisChunk) {
-        // Can't schedule this step at all → don't schedule later steps.
-        skipRemainingPlanSteps = true;
-      }
     }
 
     const tasksById = new Map<string, Task>();

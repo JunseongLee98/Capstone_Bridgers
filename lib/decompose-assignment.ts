@@ -190,5 +190,30 @@ export async function decomposeAssignment(
     throw new Error('Model response missing "subtasks" array.');
   }
 
-  return { subtasks: parsed.subtasks as DecomposeSubtask[] };
+  const raw = parsed.subtasks as unknown[];
+  const cleaned: DecomposeSubtask[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const st = item as Record<string, unknown>;
+    const title = typeof st.title === 'string' ? st.title.trim() : '';
+    if (!title) continue;
+    const description =
+      typeof st.description === 'string' ? st.description : undefined;
+    let estimatedMinutes: number | undefined;
+    if (typeof st.estimatedMinutes === 'number' && Number.isFinite(st.estimatedMinutes)) {
+      estimatedMinutes = Math.max(15, Math.round(st.estimatedMinutes));
+    }
+    cleaned.push({
+      title,
+      description,
+      estimatedMinutes,
+      order: cleaned.length + 1,
+    });
+  }
+
+  if (cleaned.length === 0) {
+    throw new Error('Model returned no usable subtasks (missing titles).');
+  }
+
+  return { subtasks: cleaned };
 }
