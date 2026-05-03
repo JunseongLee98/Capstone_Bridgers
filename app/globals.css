@@ -18,6 +18,10 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+main {
+  background: #373147 !important;
+}
+
 /* ==================================
    REACT BIG CALENDAR - BASE STYLES
    ================================== */

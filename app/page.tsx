@@ -982,8 +982,8 @@ export default function Home() {
   return (
     <main className="h-screen flex flex-col bg-white">
       {/* Header with dropdowns */}
-      <header className="p-4">
-        <div className={`relative bg-primary-dark shadow-lg p-5 border border-gray-200 transition-all duration-200 ${ mobileMenuOpen ? 'rounded-t-lg rounded-b-none' : 'rounded-lg' }`}>
+      <header>
+        <div className={`relative bg-primary-dark p-4 transition-all duration-200`}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="relative h-12 w-[150px]">
@@ -1184,321 +1184,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Tasks Dropdown */}
-              <div className="relative" ref={tasksDropdownRef}>
-                <button
-                  onClick={() => {
-                    setTasksDropdownOpen(!tasksDropdownOpen);
-                  }}
-                  className={`task-dropdown-btn flex items-center gap-5 px-5 py-2 rounded-lg bg-primary-light text-white font-semibold text-s border border-white/25 transition-colors hover:bg-primary-light/90 hover:text-white ${tasksDropdownOpen ? "bg-primary-light/80 border-white/50 text-white" : ""}`}                >
-                  <Menu size={20} />
-                  Tasks
-                  {incompleteTasksCount > 0 && (
-                    <span className="bg-white/90 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                      {incompleteTasksCount}
-                    </span>
-                  )}
-                  <ChevronDown size={18} />
-                </button>
-                
-                {tasksDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-[calc(100vh-120px)] overflow-y-auto">
-                    <div className="p-4 border-b border-gray-200">
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-primary">Tasks</h2>
-                        <div className="flex gap-2">
-                          <input
-                            ref={tasksFileInputRef}
-                            type="file"
-                            accept=".ics,text/calendar"
-                            onChange={handleImportTasksFromICS}
-                            className="hidden"
-                            disabled={isImportingICS}
-                          />
-                          <button
-                            onClick={triggerTasksFileInput}
-                            disabled={isImportingICS}
-                            className="task-dropdown-import-btn flex items-center gap-1.5 px-3.5 py-1.5 font-medium text-gray-700 text-xs rounded-lg border transition-colors disabled:opacity-50"
-                            title="Import tasks from ICS file"
-                          >
-                            <Upload size={14} />
-                            Import ICS
-                          </button>
-                          <button
-                            onClick={() => {
-                              setTaskDurationMode('preset');
-                              setIsAddingTask(!isAddingTask);
-                            }}
-                            className="task-dropdown-add-task-btn flex items-center gap-2 px-3.5 py-1.5 border font-medium text-white text-sm rounded-lg transition-colors"
-                          >
-                            <Plus size={16} />
-                            Add Task
-                          </button>
-                        </div>
-                      </div>
-
-                      {isAddingTask && (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            if (newTask.title.trim()) {
-                              handleAddTask(newTask);
-                            }
-                          }}
-                          className="mb-4 p-3 bg-gray-50 rounded-lg"
-                        >
-                          <div className="space-y-3">
-                            <input
-                              type="text"
-                              value={newTask.title}
-                              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                              placeholder="Task title *"
-                              required
-                            />
-                            <textarea
-                              value={newTask.description}
-                              onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                              placeholder="Description"
-                              rows={2}
-                            />
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Estimated Duration
-                              </label>
-                              <div className="flex gap-2">
-                                <div className="flex-1 space-y-2">
-                                  <select
-                                    value={
-                                      taskDurationMode === 'preset'
-                                        ? String(newTask.estimatedDuration || 60)
-                                        : 'custom'
-                                    }
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      if (value === 'custom') {
-                                        setTaskDurationMode('custom');
-                                        setNewTask((prev) => ({
-                                          ...prev,
-                                          estimatedDuration: Math.max(
-                                            15,
-                                            Math.round(taskDurationCustomHours * 60)
-                                          ),
-                                        }));
-                                        return;
-                                      }
-                                      setTaskDurationMode('preset');
-                                      const minutes = parseInt(value, 10) || 60;
-                                      setNewTask({ ...newTask, estimatedDuration: minutes });
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                  >
-                                    {[30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600].map((mins) => (
-                                      <option key={mins} value={mins}>
-                                        {formatMinutesToHoursMinutes(mins)}
-                                      </option>
-                                    ))}
-                                    <option value="custom">Custom (hours)</option>
-                                  </select>
-                                  {taskDurationMode === 'custom' && (
-                                    <div className="flex items-center gap-2">
-                                      <input
-                                        type="number"
-                                        min={0.5}
-                                        step={0.5}
-                                        value={taskDurationCustomHours}
-                                        onChange={(e) => {
-                                          const hours = parseFloat(e.target.value) || 0;
-                                          setTaskDurationCustomHours(hours);
-                                          const minutes = Math.max(0, Math.round(hours * 60));
-                                          setNewTask({ ...newTask, estimatedDuration: minutes });
-                                        }}
-                                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        placeholder="Hours"
-                                      />
-                                      <span className="text-xs text-gray-600">hours</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 min-w-[140px] flex items-center">
-                                  {formatMinutesToHoursMinutes(newTask.estimatedDuration || 0)}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="relative">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                  Due Date (Optional)
-                                </label>
-                                <div className="relative">
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={newTask.dueDate ? new Date(newTask.dueDate + 'T00:00:00').toLocaleDateString() : 'Select date'}
-                                    onClick={() => setShowDueDatePicker(!showDueDatePicker)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent cursor-pointer"
-                                    placeholder="Select date"
-                                  />
-                                  <CalendarIcon 
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" 
-                                    size={16} 
-                                  />
-                                  {showDueDatePicker && (
-                                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-50 p-3">
-                                      <div className="flex justify-between items-center mb-2">
-                                        <button
-                                          onClick={() => {
-                                            const today = new Date();
-                                            today.setHours(0, 0, 0, 0);
-                                            setNewTask({ ...newTask, dueDate: formatDateToLocalISO(today) });
-                                            setShowDueDatePicker(false);
-                                          }}
-                                          className="text-xs px-2 py-1 bg-primary-50 text-primary-700 rounded hover:bg-primary-100"
-                                        >
-                                          Today
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            const tomorrow = new Date();
-                                            tomorrow.setDate(tomorrow.getDate() + 1);
-                                            tomorrow.setHours(0, 0, 0, 0);
-                                            setNewTask({ ...newTask, dueDate: formatDateToLocalISO(tomorrow) });
-                                            setShowDueDatePicker(false);
-                                          }}
-                                          className="text-xs px-2 py-1 bg-primary-50 text-primary-700 rounded hover:bg-primary-100"
-                                        >
-                                          Tomorrow
-                                        </button>
-                                        <button
-                                          onClick={() => setShowDueDatePicker(false)}
-                                          className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
-                                        >
-                                          <X size={14} />
-                                        </button>
-                                      </div>
-                                      <input
-                                        type="date"
-                                        value={newTask.dueDate || ''}
-                                        onChange={(e) => {
-                                          setNewTask({ ...newTask, dueDate: e.target.value || undefined });
-                                          setShowDueDatePicker(false);
-                                        }}
-                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                        min={formatDateToLocalISO(new Date())}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                  Priority
-                                </label>
-                                <select
-                                  value={newTask.priority}
-                                  onChange={(e) =>
-                                    setNewTask({ ...newTask, priority: e.target.value as 'low' | 'medium' | 'high' })
-                                  }
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                >
-                                  <option value="low">Low</option>
-                                  <option value="medium">Medium</option>
-                                  <option value="high">High</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="submit"
-                                className="task-dropdown-add-btn flex-1 px-3 py-1.5 text-white font-normal text-sm rounded-lg"
-                              >
-                                Add
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setIsAddingTask(false)}
-                                className="cancel-btn px-3 py-1.5 text-primary text-sm rounded-lg border"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </form>
-                      )}
-                    </div>
-
-                    <div className="p-4 space-y-2">
-                      {tasks.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4 text-sm">No tasks yet</p>
-                      ) : (
-                        tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className="p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="font-semibold text-gray-800 text-sm truncate">{task.title}</h3>
-                                  <span
-                                    className={`px-1.5 py-0.5 text-xs font-medium rounded border flex-shrink-0 ${getPriorityColor(
-                                      task.priority
-                                    )}`}
-                                  >
-                                    {task.priority}
-                                  </span>
-                                </div>
-                                {task.description && (
-                                  <p className="text-xs text-gray-600 mb-1 line-clamp-1">{task.description}</p>
-                                )}
-                                <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                                  <div className="flex items-center gap-1">
-                                    <Clock size={12} />
-                                    <span>Avg: {formatMinutesToHoursMinutes(getAverageDuration(task))}</span>
-                                  </div>
-                                  {task.actualDurations.length > 0 && (
-                                    <span className="text-gray-400">({task.actualDurations.length} completed)</span>
-                                  )}
-                                  {task.dueDate && (
-                                    <span className="text-orange-600">
-                                      Due: {new Date(task.dueDate).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 ml-2">
-                                {!task.completedAt && (
-                                  <button
-                                    onClick={() => {
-                                      const duration = prompt('How long did this task actually take? (in minutes)');
-                                      if (duration) {
-                                        handleCompleteTask(task.id, parseInt(duration));
-                                      }
-                                    }}
-                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                                    title="Mark as completed"
-                                  >
-                                    <CheckCircle2 size={16} />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteTask(task.id)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                  title="Delete task"
-                                >
-                                  <X size={16} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div ref={notificationsRef}>
                 <NotificationsBell
                   notifications={notifications}
@@ -1613,36 +1298,182 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Full-width Calendar */}
+      {/* Full-Width Calendar with Task Sidebar */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="h-full w-full p-4 ">
-          <div className="h-full w-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0 border border-gray-200">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-gray-800">Calendar</h2>
-                <p className="text-sm text-gray-500">Click and drag to create events</p>
+        <div className="h-full w-full px-6 py-4">
+          <div className="h-full w-full grid grid-cols-[1fr_300px] gap-4">
+
+            {/* Calendar Card */}
+            <div className="h-full bg-background rounded-lg shadow-lg p-6 flex flex-col min-h-0 border border-gray-200">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-800">Calendar</h2>
+                  <p className="text-sm text-gray-500">Click and drag to create events</p>
+                </div>
               </div>
-              <button
-                onClick={() => {
-                  setTaskDurationMode('preset');
-                  setShowAddTaskDialog(true);
-                  setTasksDropdownOpen(false);
-                  setIsAddingTask(false);
-                }}
-                className="add-task-btn flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-light text-white border border-white/25 font-semibold shadow-md hover:bg-primary-light/90 transition-all"
-                title="Add a new task"
-              >
-                <Plus size={18} />
-                Add Task
-              </button>
+
+              <div className="flex-1 min-h-0">
+                <Calendar
+                  events={allEvents}
+                  onSelectSlot={handleSelectSlot}
+                  onSelectEvent={handleSelectEvent}
+                />
+              </div>
             </div>
-            <div className="flex-1 min-h-0">
-            <Calendar
-              events={allEvents}
-              onSelectSlot={handleSelectSlot}
-              onSelectEvent={handleSelectEvent}
-            />
-            </div>
+
+            {/* Task Sidebar */}
+            <aside className="h-full min-h-0 flex flex-col gap-4">
+
+              {/* Tasks */}
+              <div className="bg-background rounded-lg shadow-lg border border-gray-200 p-4 flex flex-col min-h-0 flex-1">
+
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-primary">Tasks</h2>
+
+                  <button
+                    onClick={() => {
+                      setTaskDurationMode('preset');
+                      setShowAddTaskDialog(true);
+                      setIsAddingTask(false);
+                    }}
+                    className="h-8 w-8 rounded-lg bg-primary-light text-white flex items-center justify-center hover:bg-primary-light/90 transition-colors"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                <div className="flex gap-2 mb-3">
+                  <button className="flex-1 py-1.5 rounded-lg border text-xs font-medium bg-white text-gray-700">
+                    Active ({tasks.filter(t => !t.completedAt).length})
+                  </button>
+                  <button className="flex-1 py-1.5 rounded-lg border text-xs font-medium text-gray-400">
+                    Completed
+                  </button>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+
+                  {tasks.length === 0 ? (
+                    <p className="text-gray-500 text-center py-6 text-sm">No tasks yet</p>
+                  ) : (
+                    tasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow bg-white"
+                      >
+                        <div className="flex items-start justify-between">
+
+                          <div className="flex-1 min-w-0">
+
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-gray-800 text-sm truncate">
+                                {task.title}
+                              </h3>
+
+                              <span
+                                className={`px-1.5 py-0.5 text-xs font-medium rounded border flex-shrink-0 ${getPriorityColor(
+                                  task.priority
+                                )}`}
+                              >
+                                {task.priority}
+                              </span>
+                            </div>
+
+                            {task.description && (
+                              <p className="text-xs text-gray-600 mb-1 line-clamp-1">
+                                {task.description}
+                              </p>
+                            )}
+                            
+                            <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                              <div className="flex items-center gap-1 text-primary font-medium">
+                                <Clock size={12} />
+                                <span>
+                                  Avg: {formatMinutesToHoursMinutes(getAverageDuration(task))}
+                                </span>
+                              </div>
+
+                              {task.actualDurations.length > 0 && (
+                                <span className="text-gray-400">
+                                  ({task.actualDurations.length} completed)
+                                </span>
+                              )}
+
+                              {task.dueDate && (
+                                <span className="text-orange-600">
+                                  Due: {new Date(task.dueDate).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 ml-2">
+
+                            {!task.completedAt && (
+                              <button
+                                onClick={() => {
+                                  const duration = prompt('How long did this task actually take? (in minutes)');
+                                  if (duration) {
+                                    handleCompleteTask(task.id, parseInt(duration));
+                                  }
+                                }}
+                                className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              >
+                                <CheckCircle2 size={16} />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <X size={16} />
+                            </button>
+
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              
+              {/* Mini Calendar */}
+              <div className="bg-background rounded-lg shadow-lg border border-gray-200 p-4">
+
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-primary">October 2024</h3>
+
+                  <div className="flex items-center gap-3 text-gray-500 text-xs">
+                    <button>‹</button>
+                    <button>›</button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-2 text-center text-[10px] text-gray-300 mb-3">
+                  {['S','M','T','W','T','F','S'].map(d => <div key={d}>{d}</div>)}
+                </div>
+
+                <div className="grid grid-cols-7 gap-2 text-center text-[10px] text-gray-400">
+                  {Array.from({ length: 35 }, (_, i) => {
+                    const day = i + 1;
+
+                    return (
+                      <div
+                        key={i}
+                        className={`h-6 w-6 mx-auto flex items-center justify-center rounded-full ${
+                          day === 23
+                            ? 'bg-primary-light text-white font-semibold'
+                            : 'hover:bg-gray-100'
+                        }`}
+                      >
+                        {day <= 31 ? day : ''}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </div>
