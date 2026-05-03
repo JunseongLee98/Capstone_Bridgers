@@ -68,6 +68,7 @@ main {
   border-radius: 8px;
 }
 
+/* Base button styles */
 .rbc-toolbar .rbc-btn-group button {
   background: white;
   color: #3B3B3B;
@@ -77,6 +78,44 @@ main {
   font-size: 14px;
   font-weight: 500;
   transition: all 60ms ease;
+}
+
+/* Calendar Nav button group: Back / Today / Next */
+.rbc-toolbar .rbc-btn-group:first-child {
+  display: flex;
+}
+
+/* Reset only nav button group - exludes Month / Week / Day / Agenda */
+.rbc-toolbar .rbc-btn-group:first-child button {
+  border-radius: 0 !important;
+  margin-left: -1px;
+}
+
+/* Back button (<) */
+.rbc-toolbar .rbc-btn-group:first-child button:nth-child(2) {
+  order: 1;
+  width: 36px;
+  min-width: 36px;
+  padding: 0 !important;
+  font-size: 18px !important;
+  border-radius: 8px 0 0 8px !important;
+  margin-left: 0;
+}
+
+/* Today button */
+.rbc-toolbar .rbc-btn-group:first-child button:nth-child(1) {
+  order: 2;
+  min-width: 72px;
+}
+
+/* Next button (>) */
+.rbc-toolbar .rbc-btn-group:first-child button:nth-child(3) {
+  order: 3;
+  width: 36px;
+  min-width: 36px;
+  padding: 0 !important;
+  font-size: 18px !important;
+  border-radius: 0 8px 8px 0 !important;
 }
 
 .rbc-header {

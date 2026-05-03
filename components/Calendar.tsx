@@ -9,6 +9,8 @@ import { CalendarEvent } from '@/types';
 
 interface CalendarProps {
   events: CalendarEvent[];
+  date?: Date;
+  onDateChange?: (date: Date) => void;
   onSelectSlot?: (slot: { start: Date; end: Date }) => void;
   onSelectEvent?: (event: CalendarEvent) => void;
 }
@@ -58,9 +60,20 @@ function TimeSlotWrapper({ children, value }: TimeSlotWrapperProps) {
   );
 }
 
-export default function Calendar({ events, onSelectSlot, onSelectEvent }: CalendarProps) {
+export default function Calendar({ events, date, onDateChange, onSelectSlot, onSelectEvent }: CalendarProps) {
   const [currentView, setCurrentView] = useState<View>('week');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [internalDate, setInternalDate] = useState(new Date());
+
+  const currentDate = date ?? internalDate;
+
+  // Handles navigation (Back / Next / Today)
+  const handleNavigate = (nextDate: Date) => {
+    if (onDateChange) {
+      onDateChange(nextDate);
+    } else {
+      setInternalDate(nextDate);
+    }
+  };
 
   const formattedEvents = useMemo(() => {
     return events.map(event => ({
@@ -124,7 +137,12 @@ export default function Calendar({ events, onSelectSlot, onSelectEvent }: Calend
           view={currentView}
           onView={setCurrentView}
           date={currentDate}
-          onNavigate={setCurrentDate}
+          messages={{
+            previous: "‹",
+            today: "Today",
+            next: "›",
+          }}
+          onNavigate={handleNavigate}
           onSelectSlot={onSelectSlot}
           onSelectEvent={onSelectEvent}
           selectable

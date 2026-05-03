@@ -79,6 +79,8 @@ export default function Home() {
   const [taskDurationCustomHours, setTaskDurationCustomHours] = useState(1);
   const [conversionDurationMode, setConversionDurationMode] = useState<'preset' | 'custom'>('preset');
   const [conversionDurationCustomHours, setConversionDurationCustomHours] = useState(1);
+  const [miniCalendarDate, setMiniCalendarDate] = useState(new Date());
+  const [mainCalendarDate, setMainCalendarDate] = useState(new Date());
 
   const tasksDropdownRef = useRef<HTMLDivElement>(null);
   const subscriptionColorMenuRef = useRef<HTMLDivElement>(null);
@@ -979,6 +981,44 @@ export default function Home() {
 
   const incompleteTasksCount = tasks.filter(t => !t.completedAt).length;
 
+  // Mini calendar display data
+  const miniCalendarYear = miniCalendarDate.getFullYear();
+  const miniCalendarMonth = miniCalendarDate.getMonth();
+
+  const miniCalendarMonthLabel = miniCalendarDate.toLocaleDateString('en-US', {
+  month: 'long',
+  year: 'numeric',
+  });
+
+  const firstDayOfMonth = new Date(miniCalendarYear, miniCalendarMonth, 1);
+  const lastDayOfMonth = new Date(miniCalendarYear, miniCalendarMonth + 1, 0);
+
+  const startDay = firstDayOfMonth.getDay();
+  const daysInMonth = lastDayOfMonth.getDate();
+
+  const miniCalendarDays = Array.from({ length: 42 }, (_, index) => {
+    const dayNumber = index - startDay + 1;
+
+    if (dayNumber < 1 || dayNumber > daysInMonth) {
+      return null;
+    }
+
+    return dayNumber;
+  });
+
+  const today = new Date();
+  const isCurrentMiniCalendarMonth =
+    today.getFullYear() === miniCalendarYear &&
+    today.getMonth() === miniCalendarMonth;
+
+  const goToPreviousMiniMonth = () => {
+    setMiniCalendarDate(new Date(miniCalendarYear, miniCalendarMonth - 1, 1));
+  };
+
+  const goToNextMiniMonth = () => {
+    setMiniCalendarDate(new Date(miniCalendarYear, miniCalendarMonth + 1, 1));
+  };
+
   return (
     <main className="h-screen flex flex-col bg-white">
       {/* Header with dropdowns */}
@@ -1315,6 +1355,11 @@ export default function Home() {
               <div className="flex-1 min-h-0">
                 <Calendar
                   events={allEvents}
+                  date={mainCalendarDate}
+                  onDateChange={(date) => {
+                    setMainCalendarDate(date);
+                    setMiniCalendarDate(date);
+                  }}
                   onSelectSlot={handleSelectSlot}
                   onSelectEvent={handleSelectEvent}
                 />
@@ -1328,7 +1373,7 @@ export default function Home() {
               <div className="bg-background rounded-lg shadow-lg border border-gray-200 p-4 flex flex-col min-h-0 flex-1">
 
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-primary">Tasks</h2>
+                  <h2 className="text-xl font-semibold text-primary">Tasks</h2>
 
                   <button
                     onClick={() => {
@@ -1442,35 +1487,64 @@ export default function Home() {
               <div className="bg-background rounded-lg shadow-lg border border-gray-200 p-4">
 
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-bold text-primary">October 2024</h3>
+                  <h3 className="text-md font-semibold text-primary">
+                    {miniCalendarMonthLabel}
+                  </h3>
+                  
+                  <div className="flex items-center gap-2 text-gray-500 text-xs">
+                    <button
+                      type="button"
+                      onClick={goToPreviousMiniMonth}
+                      className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-gray-200 text-lg"
+                    >
+                      ‹
+                    </button>
 
-                  <div className="flex items-center gap-3 text-gray-500 text-xs">
-                    <button>‹</button>
-                    <button>›</button>
+                    <button
+                      type="button"
+                      onClick={goToNextMiniMonth}
+                      className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-gray-200 text-lg"
+                    >
+                      ›
+                    </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-7 gap-2 text-center text-[10px] text-gray-300 mb-3">
+                
+                {/* Days of the week*/}
+                <div className="grid grid-cols-7 gap-2 text-center text-[11px] text-gray-400 mb-3">
                   {['S','M','T','W','T','F','S'].map(d => <div key={d}>{d}</div>)}
                 </div>
 
-                <div className="grid grid-cols-7 gap-2 text-center text-[10px] text-gray-400">
-                  {Array.from({ length: 35 }, (_, i) => {
-                    const day = i + 1;
+                {/* Mini calendar days grid */}
+                <div className="grid grid-cols-7 gap-2 text-center text-[11px] text-gray-600">
+                  {miniCalendarDays.map((day, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      disabled={!day}
+                      onClick={() => {
+                        if (!day) return;
+                          const selectedDate = new Date(miniCalendarYear, miniCalendarMonth, day);
+                          setMainCalendarDate(selectedDate);
+                          setMiniCalendarDate(selectedDate);
+                      }}
+                      className={`h-6 w-6 mx-auto flex items-center justify-center rounded-full ${
 
-                    return (
-                      <div
-                        key={i}
-                        className={`h-6 w-6 mx-auto flex items-center justify-center rounded-full ${
-                          day === 23
-                            ? 'bg-primary-light text-white font-semibold'
-                            : 'hover:bg-gray-100'
-                        }`}
-                      >
-                        {day <= 31 ? day : ''}
-                      </div>
-                    );
-                  })}
+                        // Highlight selected date
+                        day && mainCalendarDate.getFullYear() === miniCalendarYear &&
+                        mainCalendarDate.getMonth() === miniCalendarMonth &&
+                        mainCalendarDate.getDate() === day
+                          ? 'bg-primary-light text-white font-semibold'
+
+                          // Highlight today's date
+                          : day && isCurrentMiniCalendarMonth && day === today.getDate()
+                            ? 'border border-primary-light text-primary font-semibold'
+                            : day ? 'hover:bg-gray-200' : ''
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
                 </div>
               </div>
             </aside>
