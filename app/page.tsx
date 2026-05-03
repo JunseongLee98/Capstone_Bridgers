@@ -32,6 +32,7 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [taskSidebarTab, setTaskSidebarTab] = useState<'active' | 'completed'>('active');
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -980,6 +981,9 @@ export default function Home() {
   };
 
   const incompleteTasksCount = tasks.filter(t => !t.completedAt).length;
+  const activeTasks = tasks.filter(task => !task.completedAt);
+  const completedTasks = tasks.filter(task => task.completedAt);
+  const displayedTasks = taskSidebarTab === 'active' ? activeTasks : completedTasks;
 
   // Mini calendar display data
   const miniCalendarYear = miniCalendarDate.getFullYear();
@@ -1388,20 +1392,36 @@ export default function Home() {
                 </div>
 
                 <div className="flex gap-2 mb-3">
-                  <button className="flex-1 py-1.5 rounded-lg border text-xs font-medium bg-white text-gray-700">
-                    Active ({tasks.filter(t => !t.completedAt).length})
+                  <button
+                    type="button"
+                    onClick={() => setTaskSidebarTab('active')}
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      taskSidebarTab === 'active'
+                        ? 'bg-white text-gray-700 border-gray-300'
+                        : 'text-gray-400 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Active ({activeTasks.length})
                   </button>
-                  <button className="flex-1 py-1.5 rounded-lg border text-xs font-medium text-gray-400">
-                    Completed
+
+                  <button
+                    type="button"
+                    onClick={() => setTaskSidebarTab('completed')}
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      taskSidebarTab === 'completed'
+                        ? 'bg-white text-gray-700 border-gray-300'
+                        : 'text-gray-400 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Completed ({completedTasks.length})
                   </button>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
-
-                  {tasks.length === 0 ? (
-                    <p className="text-gray-500 text-center py-6 text-sm">No tasks yet</p>
+                  {displayedTasks.length === 0 ? (
+                    <p className="text-gray-500 text-center py-6 text-sm">No {taskSidebarTab} tasks</p>
                   ) : (
-                    tasks.map((task) => (
+                    displayedTasks.map((task) => (
                       <div
                         key={task.id}
                         className="p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow bg-white"
@@ -1411,17 +1431,9 @@ export default function Home() {
                           <div className="flex-1 min-w-0">
 
                             <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-gray-800 text-sm truncate">
+                              <h3 className="font-semibold text-gray-800 text-sm truncate mb-1">
                                 {task.title}
                               </h3>
-
-                              <span
-                                className={`px-1.5 py-0.5 text-xs font-medium rounded border flex-shrink-0 ${getPriorityColor(
-                                  task.priority
-                                )}`}
-                              >
-                                {task.priority}
-                              </span>
                             </div>
 
                             {task.description && (
@@ -1452,28 +1464,37 @@ export default function Home() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1 ml-2">
-
-                            {!task.completedAt && (
-                              <button
-                                onClick={() => {
-                                  const duration = prompt('How long did this task actually take? (in minutes)');
-                                  if (duration) {
-                                    handleCompleteTask(task.id, parseInt(duration));
-                                  }
-                                }}
-                                className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                              >
-                                <CheckCircle2 size={16} />
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => handleDeleteTask(task.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          <div className="flex flex-col items-end justify-between ml-2 h-full">
+                            <span
+                              className={`px-1.5 py-0.5 text-xs font-medium rounded border flex-shrink-0 ${getPriorityColor(
+                                task.priority
+                              )}`}
                             >
-                              <X size={16} />
-                            </button>
+                              {task.priority}
+                            </span>
+
+                            <div className="flex items-center gap-1">
+                              {!task.completedAt && (
+                                <button
+                                  onClick={() => {
+                                    const duration = prompt('How long did this task actually take? (in minutes)');
+                                    if (duration) {
+                                      handleCompleteTask(task.id, parseInt(duration));
+                                    }
+                                  }}
+                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                >
+                                  <CheckCircle2 size={14} />
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleDeleteTask(task.id)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
 
                           </div>
                         </div>
