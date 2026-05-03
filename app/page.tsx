@@ -33,6 +33,7 @@ export default function Home() {
   const [tasksDropdownOpen, setTasksDropdownOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskSidebarTab, setTaskSidebarTab] = useState<'active' | 'completed'>('active');
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -1424,78 +1425,89 @@ export default function Home() {
                     displayedTasks.map((task) => (
                       <div
                         key={task.id}
-                        className="p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow bg-white"
+                        onClick={() =>
+                          setExpandedTaskId(expandedTaskId === task.id ? null : task.id)
+                        }
+                        className="p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow bg-white flex flex-col cursor-pointer"
                       >
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-semibold text-gray-800 text-sm flex-1 truncate">
+                            {task.title}
+                          </h3>
 
-                          <div className="flex-1 min-w-0">
-
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-gray-800 text-sm truncate mb-1">
-                                {task.title}
-                              </h3>
-                            </div>
-
-                            {task.description && (
-                              <p className="text-xs text-gray-600 mb-1 line-clamp-1">
-                                {task.description}
-                              </p>
-                            )}
-                            
-                            <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                              <div className="flex items-center gap-1 text-primary font-medium">
-                                <Clock size={12} />
-                                <span>
-                                  Avg: {formatMinutesToHoursMinutes(getAverageDuration(task))}
-                                </span>
-                              </div>
-
-                              {task.actualDurations.length > 0 && (
-                                <span className="text-gray-400">
-                                  ({task.actualDurations.length} completed)
-                                </span>
-                              )}
-
-                              {task.dueDate && (
-                                <span className="text-orange-600">
-                                  Due: {new Date(task.dueDate).toLocaleDateString()}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end justify-between ml-2 h-full">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <span
-                              className={`px-1.5 py-0.5 text-xs font-medium rounded border flex-shrink-0 ${getPriorityColor(
+                              className={`px-1.5 py-0.5 text-xs font-medium rounded border ${getPriorityColor(
                                 task.priority
                               )}`}
                             >
                               {task.priority}
                             </span>
 
-                            <div className="flex items-center gap-1">
-                              {!task.completedAt && (
-                                <button
-                                  onClick={() => {
-                                    const duration = prompt('How long did this task actually take? (in minutes)');
-                                    if (duration) {
-                                      handleCompleteTask(task.id, parseInt(duration));
-                                    }
-                                  }}
-                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                                >
-                                  <CheckCircle2 size={14} />
-                                </button>
-                              )}
+                            <ChevronDown
+                              size={14}
+                              className={`text-gray-400 transition-transform ${
+                                expandedTaskId === task.id ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </div>
+                        </div>
 
-                              <button
-                                onClick={() => handleDeleteTask(task.id)}
-                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                              >
-                                <X size={14} />
-                              </button>
+                        {task.description && (
+                          <div
+                            className={`mt-1 w-full overflow-hidden transition-[max-height] duration-300 ease-in-out ${
+                              expandedTaskId === task.id ? 'max-h-40' : 'max-h-4'
+                            }`}
+                          >
+                            <p className="text-xs text-gray-600 leading-4">
+                              {task.description}
+                            </p>
+                          </div>
+                        )}
+        
+                        <div className="mt-2 flex items-center justify-between text-xs text-gray-500 flex-wrap">
+                          <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                            <div className="flex items-center gap-1 text-primary font-medium">
+                              <Clock size={12} />
+                              <span>
+                                Avg: {formatMinutesToHoursMinutes(getAverageDuration(task))}
+                              </span>
                             </div>
 
+                            {task.actualDurations.length > 0 && (
+                              <span className="text-gray-400">
+                                ({task.actualDurations.length} completed)
+                              </span>
+                            )}
+
+                            {task.dueDate && (
+                              <span className="text-orange-600">
+                                Due: {new Date(task.dueDate).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-1">
+                            {!task.completedAt && (
+                              <button
+                                onClick={() => {
+                                  const duration = prompt('How long did this task actually take? (in minutes)');
+                                  if (duration) {
+                                    handleCompleteTask(task.id, parseInt(duration));
+                                  }
+                                }}
+                                className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                              >
+                                <CheckCircle2 size={14} />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <X size={14} />
+                            </button>
                           </div>
                         </div>
                       </div>
